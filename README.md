@@ -1,2 +1,3 @@
 # Protein-Subcellular-Location
-Protein subcellular location based on electron microscopic image
+A protein subcellular locator based on electron microscopic image. 
+Datasets are from Human Protein Atlas (HPA).
