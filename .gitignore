@@ -1,3 +1,6 @@
+model/
+log/
+
 # IDEA
 .idea/
 
@@ -105,3 +108,9 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# Mac OS
+.DS_Store
+
+# Dataset
+HPA_ieee
