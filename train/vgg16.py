@@ -6,11 +6,12 @@ VGG-16 train for classification
 """
 
 import random
-import tensorflow as tf
-import numpy as np
 
-from train.utils import per_class_acc
+import numpy as np
+import tensorflow as tf
+
 from config import CKPT_PATH, LOG_PATH
+from trainer.utils import per_class_acc
 
 
 def variable_with_weight_decay(name, shape, initializer, wd=None):
