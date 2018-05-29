@@ -9,3 +9,4 @@ CKPT_PATH = "D:/Computer Science/Github/Protein-Subcellular-Location/model"
 LOG_PATH = "D:/Computer Science/Github/Protein-Subcellular-Location/log"
 
 DATASET_PATH = "D:/Computer Science/dataset/HPA_ieee"
+RECORD_PATH = "D:/Computer Science/dataset/HPA_ieee/record"

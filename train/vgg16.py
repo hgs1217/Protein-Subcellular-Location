@@ -10,8 +10,9 @@ import random
 import numpy as np
 import tensorflow as tf
 
-from config import CKPT_PATH, LOG_PATH
-from trainer.utils import per_class_acc
+from config import CKPT_PATH, LOG_PATH, DATASET_PATH
+from train.utils import per_class_acc
+from data_process.image_preprocessor import ImagePreprocessor
 
 
 def variable_with_weight_decay(name, shape, initializer, wd=None):
@@ -106,6 +107,7 @@ class VGG16:
         self._start_step = start_step
         self._learning_rate = learning_rate
         self._classes = classes
+        self._image_pre = ImagePreprocessor(base_dir=DATASET_PATH)
         [_, self._input_width, self._input_height, self._input_channels] = raws.shape
 
         self._x = tf.placeholder(tf.float32, shape=[None, self._input_width, self._input_height, self._input_channels],
@@ -176,6 +178,9 @@ class VGG16:
             train_op = tf.no_op(name='train')
 
         return train_op
+
+    def load_data(self):
+        pass
 
     def train(self):
         config = tf.ConfigProto()
