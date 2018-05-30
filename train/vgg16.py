@@ -6,7 +6,7 @@ VGG-16 train for classification
 """
 
 import random
-
+import time
 import numpy as np
 import tensorflow as tf
 
@@ -79,8 +79,8 @@ def conv_layer(x, ksize, stride, feature_num, is_training, name=None, padding="S
         return tf.nn.relu(tf.reshape(norm, feature_shape), name=scope.name)
 
 
-def max_pool_layer(x, ksize, stride, name, padding="SAME"):
-    return tf.nn.max_pool(x, ksize=[1, ksize, ksize, 1],
+def avg_pool_layer(x, ksize, stride, name=None, padding="SAME"):
+    return tf.nn.avg_pool(x, ksize=[1, ksize, ksize, 1],
                           strides=[1, stride, stride, 1], padding=padding, name=name)
 
 
@@ -94,9 +94,21 @@ def fc_layer(x, feature_num, is_training, name=None, relu_flag=True):
         return tf.nn.relu(norm) if relu_flag else norm
 
 
+def weighted_loss(lgts, lbs, num_classes, loss_array):
+    with tf.name_scope('loss'):
+        epsilon = tf.constant(value=1e-10)
+        labels = lbs
+        logits = lgts + epsilon
+
+        cross_entropy = -tf.reduce_sum(tf.multiply(labels * tf.log(tf.nn.softmax(logits) + epsilon),
+                                                   np.array(loss_array)), axis=[1])
+        cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy')
+        return cross_entropy_mean
+
+
 class VGG16:
     def __init__(self, raws, labels, test_raws, test_labels, keep_pb=0.5, batch_size=240, epoch_size=100,
-                 learning_rate=0.001, classes=1, start_step=0):
+                 learning_rate=0.001, classes=1, start_step=0, loss_array=None):
         self._raws = raws
         self._labels = labels
         self._test_raws = test_raws
@@ -109,6 +121,7 @@ class VGG16:
         self._classes = classes
         self._image_pre = ImagePreprocessor(base_dir=DATASET_PATH)
         [_, self._input_width, self._input_height, self._input_channels] = raws[0].shape
+        self._loss_array = [0.5, 0.5] if loss_array is None else loss_array
 
         self._x = tf.placeholder(tf.float32, shape=[None, self._input_width, self._input_height, self._input_channels],
                                  name="input_x")
@@ -120,31 +133,47 @@ class VGG16:
 
     def _build_network(self, x, y, is_training):
         x_resh = tf.reshape(x, [-1, self._input_width, self._input_height, self._input_channels])
-        conv1_1 = conv_layer(x_resh, 3, 1, 128, is_training, name="conv1_1")
-        conv1_2 = conv_layer(conv1_1, 3, 1, 128, is_training, name="conv1_2")
-        pool1 = max_pool_layer(conv1_2, 2, 2, name="pool1")
+        # conv1_1 = conv_layer(x_resh, 3, 1, 128, is_training, name="conv1_1")
+        # conv1_2 = conv_layer(conv1_1, 3, 1, 128, is_training, name="conv1_2")
+        # pool1 = avg_pool_layer(conv1_2, 2, 2, name="pool1")
+        #
+        # conv2_1 = conv_layer(pool1, 3, 1, 256, is_training, name="conv2_1")
+        # conv2_2 = conv_layer(conv2_1, 3, 1, 256, is_training, name="conv2_2")
+        # pool2 = avg_pool_layer(conv2_2, 2, 2, name="pool2")
+        #
+        # conv3_1 = conv_layer(pool2, 3, 1, 512, is_training, name="conv3_1")
+        # conv3_2 = conv_layer(conv3_1, 3, 1, 512, is_training, name="conv3_2")
+        # conv3_3 = conv_layer(conv3_2, 3, 1, 512, is_training, name="conv3_3")
+        # pool3 = avg_pool_layer(conv3_3, 2, 2, name="pool3")
+        #
+        # fc_in = tf.reshape(pool3, [-1, 3 * 3 * 512])
+        # fc4 = fc_layer(fc_in, 4096, is_training, name="fc4", relu_flag=True)
+        # dropout4 = tf.nn.dropout(fc4, self._keep_prob)
+        #
+        # fc5 = fc_layer(dropout4, 4096, is_training, name="fc5", relu_flag=True)
+        # dropout5 = tf.nn.dropout(fc5, self._keep_prob)
+        #
+        # fc6 = fc_layer(dropout5, self._classes, is_training, name="fc6", relu_flag=False)
 
-        conv2_1 = conv_layer(pool1, 3, 1, 256, is_training, name="conv2_1")
-        conv2_2 = conv_layer(conv2_1, 3, 1, 256, is_training, name="conv2_2")
-        pool2 = max_pool_layer(conv2_2, 2, 2, name="pool2")
+        conv1 = conv_layer(x_resh, 5, 1, 32, is_training, name="conv1")
+        pool1 = avg_pool_layer(conv1, 2, 2, name="pool1")
 
-        conv3_1 = conv_layer(pool2, 3, 1, 512, is_training, name="conv3_1")
-        conv3_2 = conv_layer(conv3_1, 3, 1, 512, is_training, name="conv3_2")
-        conv3_3 = conv_layer(conv3_2, 3, 1, 512, is_training, name="conv3_3")
-        pool3 = max_pool_layer(conv3_3, 2, 2, name="pool3")
+        conv2 = conv_layer(pool1, 5, 1, 64, is_training, name="conv2")
+        pool2 = avg_pool_layer(conv2, 2, 2, name="pool2")
 
-        fc_in = tf.reshape(pool3, [-1, 3 * 3 * 512])
-        fc4 = fc_layer(fc_in, 4096, is_training, name="fc4", relu_flag=True)
-        dropout4 = tf.nn.dropout(fc4, self._keep_prob)
+        fc_in = tf.reshape(pool2, [-1, 5 * 5 * 64])
+        fc3 = fc_layer(fc_in, 1024, is_training, name="fc3", relu_flag=True)
+        dropout3 = tf.nn.dropout(fc3, self._keep_prob)
 
-        fc5 = fc_layer(dropout4, 4096, is_training, name="fc5", relu_flag=True)
-        dropout5 = tf.nn.dropout(fc5, self._keep_prob)
+        fc4 = fc_layer(dropout3, self._classes, is_training, name="fc4", relu_flag=True)
 
-        fc6 = fc_layer(dropout5, self._classes, is_training, name="fc6", relu_flag=False)
+        out = fc4
+        # loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=y, logits=out))
+        # accu = tf.reduce_mean(tf.cast(tf.equal(tf.round((tf.nn.sigmoid(out) - y) * 1.01), self._zeros), tf.float32))
 
-        out = fc6
-        loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=y, logits=out))
-        accu = tf.reduce_mean(tf.cast(tf.equal(tf.round((tf.nn.sigmoid(out) - y)), self._zeros), tf.float32))
+        # loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=out))
+        loss = weighted_loss(out, y, self._classes, self._loss_array)
+        accu = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(out, 1), tf.argmax(y, 1)), tf.float32))
         return loss, out, accu
 
     def _train_set(self, total_loss, global_step):
@@ -164,9 +193,6 @@ class VGG16:
 
         return train_op
 
-    def load_data(self):
-        pass
-
     def train(self):
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -185,14 +211,14 @@ class VGG16:
             else:
                 sess.run(tf.global_variables_initializer())
 
-            summary_writer = tf.summary.FileWriter(LOG_PATH, sess.graph)
+            # summary_writer = tf.summary.FileWriter(LOG_PATH, sess.graph)
             loss_pl = tf.placeholder(tf.float32)
             accu_pl = tf.placeholder(tf.float32)
             loss_summary = tf.summary.scalar("Average_loss", loss_pl)
             accu_summary = tf.summary.scalar("Prediction_accuracy", accu_pl)
 
             for step in range(self._start_step + 1, self._start_step + self._epoch_size + 1):
-                print("Training epoch {0}".format(step))
+                print("Training epoch %d/%d" % (step, self._epoch_size))
                 total_batch = len(self._raws)
                 epoch_loss, epoch_accu = np.zeros(total_batch), np.zeros(total_batch)
                 for bat in range(total_batch):
@@ -220,9 +246,9 @@ class VGG16:
 
                 if step % 1 == 0:
                     print("Testing epoch {0}".format(step))
-                    total_batch = len(self._raws)
-                    epoch_loss, epoch_accu = np.zeros(total_batch), np.zeros(total_batch)
-                    for bat in range(total_batch):
+                    test_batch = len(self._test_raws)
+                    epoch_loss, epoch_accu = np.zeros(test_batch), np.zeros(test_batch)
+                    for bat in range(test_batch):
                         batch_xs = self._test_raws[bat]
                         batch_ys = self._test_labels[bat]
                         pd, los, acu = sess.run([prediction, loss, accu],
@@ -235,7 +261,7 @@ class VGG16:
                                                                                         feed_dict={loss_pl: los,
                                                                                                    accu_pl: acu})
                         print("Testing epoch %d/%d, batch %d/%d, loss %g, accuracy %g" %
-                              (step, self._epoch_size, bat, total_batch, epoch_loss[bat], epoch_accu[bat]))
+                              (step, self._epoch_size, bat, test_batch, epoch_loss[bat], epoch_accu[bat]))
 
                     print("Testing epoch %d/%d finished, loss %g, accuracy %g" %
                           (step, self._epoch_size, np.mean(epoch_loss), np.mean(epoch_accu)))
@@ -258,5 +284,6 @@ class VGG16:
                     #     print("\tclass # %d accuracy = %f " % (ii, accu_class[ii] / cnt))
 
                 print("saving model.....")
-                saver.save(sess, CKPT_PATH)
+                # saver.save(sess, CKPT_PATH)
+                time.sleep(10)
                 print("end saving....\n")

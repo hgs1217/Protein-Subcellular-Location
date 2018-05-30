@@ -22,15 +22,54 @@ def train():
 
     raws, labels, test_raws, test_labels = [], [], [], []
 
+    r, l, tr, tl = [[] for _ in range(480)], [[] for _ in range(480)], \
+                   [[] for _ in range(60)], [[] for _ in range(60)]
+
+    target_label = 1
+    cnt = 0
     for i in range(len(l1)):
         lbs = set(l1[i] + l2[i])
         sz = len(d[i])
-        raws.append(np.mean(np.array(d[i][:int(sz*8/9)]), axis=3, keepdims=True))
-        test_raws.append(np.mean(np.array(d[i][int(sz*8/9):]), axis=3, keepdims=True))
-        labels.append(np.array([[1 if 0 in lbs else 0] for _ in range(int(sz*8/9))]))
-        test_labels.append(np.array([[1 if 0 in lbs else 0] for _ in range(int(sz*1/9))]))
+        if target_label in lbs:
+            cnt += 1
+        for j in range(sz):
+            if j < int(sz * 8 / 9):
+                base = 0 if i < int(len(l1) / 2) else 240
+                r[j + base].append(d[i][j])
+                l[j + base].append([1, 0] if target_label in lbs else [0, 1])
+            else:
+                base = 0 if i < int(len(l1) / 2) else 30
+                tr[j + base - int(sz * 8 / 9)].append(d[i][j])
+                tl[j + base - int(sz * 8 / 9)].append([1, 0] if target_label in lbs else [0, 1])
 
-    vgg16 = VGG16(raws, labels, test_raws, test_labels, batch_size=train_size, epoch_size=100, classes=1)
+    for i in range(480):
+        raws.append(np.mean(np.array(r[i]), axis=3, keepdims=True))
+        labels.append(np.array(l[i]))
+        if i < 60:
+            test_raws.append(np.mean(np.array(tr[i]), axis=3, keepdims=True))
+            test_labels.append(np.array(tl[i]))
+
+    print(raws[0].shape)
+    print(labels[0].shape)
+
+    # raws = raws[:50]
+    # labels = labels[:50]
+    # test_raws = test_raws[:10]
+    # test_labels = test_labels[:10]
+
+    # for i in range(len(l1)):
+    #     lbs = set(l1[i] + l2[i])
+    #     sz = len(d[i])
+    #     raws.append(np.mean(np.array(d[i][:int(sz*8/9)]), axis=3, keepdims=True))
+    #     test_raws.append(np.mean(np.array(d[i][int(sz*8/9):]), axis=3, keepdims=True))
+    #     labels.append(np.array([[1 if 0 in lbs else 0] for _ in range(int(sz*8/9))]))
+    #     test_labels.append(np.array([[1 if 0 in lbs else 0] for _ in range(int(sz*1/9))]))
+
+    print(cnt)
+    print([0.5 / (cnt / len(l1)), 0.5 / (1 - cnt / len(l1))])
+    print("Dataset constructed")
+    vgg16 = VGG16(raws, labels, test_raws, test_labels, batch_size=train_size, epoch_size=100, classes=2,
+                  loss_array=[0.5 / (cnt / len(l1)), 0.5 / (1 - cnt / len(l1))])
     vgg16.train()
 
 if __name__ == '__main__':
