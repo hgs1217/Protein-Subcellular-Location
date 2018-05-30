@@ -95,8 +95,8 @@ def fc_layer(x, feature_num, is_training, name=None, relu_flag=True):
 
 
 class VGG16:
-    def __init__(self, raws, labels, test_raws, test_labels, keep_pb=0.5, batch_size=5000, epoch_size=20000,
-                 learning_rate=0.001, classes=7, start_step=0):
+    def __init__(self, raws, labels, test_raws, test_labels, keep_pb=0.5, batch_size=240, epoch_size=100,
+                 learning_rate=0.001, classes=1, start_step=0):
         self._raws = raws
         self._labels = labels
         self._test_raws = test_raws
@@ -108,52 +108,44 @@ class VGG16:
         self._learning_rate = learning_rate
         self._classes = classes
         self._image_pre = ImagePreprocessor(base_dir=DATASET_PATH)
-        [_, self._input_width, self._input_height, self._input_channels] = raws.shape
+        [_, self._input_width, self._input_height, self._input_channels] = raws[0].shape
 
         self._x = tf.placeholder(tf.float32, shape=[None, self._input_width, self._input_height, self._input_channels],
                                  name="input_x")
         self._y = tf.placeholder(tf.float32, shape=[None, self._classes], name="input_y")
+        self._zeros = tf.placeholder(tf.float32, shape=[None, self._classes])
         self._keep_prob = tf.placeholder(tf.float32, name="keep_prob")
         self._is_training = tf.placeholder(tf.bool, name="is_training")
         self._global_step = tf.Variable(0, trainable=False)
 
     def _build_network(self, x, y, is_training):
         x_resh = tf.reshape(x, [-1, self._input_width, self._input_height, self._input_channels])
-        conv1_1 = conv_layer(x_resh, 3, 1, 64, is_training, name="conv1_1")
-        conv1_2 = conv_layer(conv1_1, 3, 1, 64, is_training, name="conv1_2")
+        conv1_1 = conv_layer(x_resh, 3, 1, 128, is_training, name="conv1_1")
+        conv1_2 = conv_layer(conv1_1, 3, 1, 128, is_training, name="conv1_2")
         pool1 = max_pool_layer(conv1_2, 2, 2, name="pool1")
 
-        conv2_1 = conv_layer(pool1, 3, 1, 128, is_training, name="conv2_1")
-        conv2_2 = conv_layer(conv2_1, 3, 1, 128, is_training, name="conv2_2")
+        conv2_1 = conv_layer(pool1, 3, 1, 256, is_training, name="conv2_1")
+        conv2_2 = conv_layer(conv2_1, 3, 1, 256, is_training, name="conv2_2")
         pool2 = max_pool_layer(conv2_2, 2, 2, name="pool2")
 
-        conv3_1 = conv_layer(pool2, 3, 1, 256, is_training, name="conv3_1")
-        conv3_2 = conv_layer(conv3_1, 3, 1, 256, is_training, name="conv3_2")
-        conv3_3 = conv_layer(conv3_2, 3, 1, 256, is_training, name="conv3_3")
+        conv3_1 = conv_layer(pool2, 3, 1, 512, is_training, name="conv3_1")
+        conv3_2 = conv_layer(conv3_1, 3, 1, 512, is_training, name="conv3_2")
+        conv3_3 = conv_layer(conv3_2, 3, 1, 512, is_training, name="conv3_3")
         pool3 = max_pool_layer(conv3_3, 2, 2, name="pool3")
 
-        conv4_1 = conv_layer(pool3, 3, 1, 512, is_training, name="conv4_1")
-        conv4_2 = conv_layer(conv4_1, 3, 1, 512, is_training, name="conv4_2")
-        conv4_3 = conv_layer(conv4_2, 3, 1, 512, is_training, name="conv4_3")
-        pool4 = max_pool_layer(conv4_3, 2, 2, name="pool4")
+        fc_in = tf.reshape(pool3, [-1, 3 * 3 * 512])
+        fc4 = fc_layer(fc_in, 4096, is_training, name="fc4", relu_flag=True)
+        dropout4 = tf.nn.dropout(fc4, self._keep_prob)
 
-        conv5_1 = conv_layer(pool4, 3, 1, 512, is_training, name="conv5_1")
-        conv5_2 = conv_layer(conv5_1, 3, 1, 512, is_training, name="conv5_2")
-        conv5_3 = conv_layer(conv5_2, 3, 1, 512, is_training, name="conv5_3")
-        pool5 = max_pool_layer(conv5_3, 2, 2, name="pool5")
+        fc5 = fc_layer(dropout4, 4096, is_training, name="fc5", relu_flag=True)
+        dropout5 = tf.nn.dropout(fc5, self._keep_prob)
 
-        fc_in = tf.reshape(pool5, [-1, 4 * 4 * 512])
-        fc6 = fc_layer(fc_in, 4096, is_training, name="fc6", relu_flag=True)
-        dropout6 = tf.nn.dropout(fc6, self._keep_prob)
+        fc6 = fc_layer(dropout5, self._classes, is_training, name="fc6", relu_flag=False)
 
-        fc7 = fc_layer(dropout6, 4096, is_training, name="fc7", relu_flag=True)
-        dropout7 = tf.nn.dropout(fc7, self._keep_prob)
-
-        fc8 = fc_layer(dropout7, 10, is_training, name="fc8", relu_flag=False)
-
-        out = fc8
-        loss = tf.reduce_mean(tf.reduce_sum(tf.abs((y - out) / y), reduction_indices=[1]))
-        return loss, out
+        out = fc6
+        loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=y, logits=out))
+        accu = tf.reduce_mean(tf.cast(tf.equal(tf.round((tf.nn.sigmoid(out) - y)), self._zeros), tf.float32))
+        return loss, out, accu
 
     def _train_set(self, total_loss, global_step):
         loss_averages_op = add_loss_summaries(total_loss)
@@ -163,13 +155,6 @@ class VGG16:
             grads = opt.compute_gradients(total_loss)
 
         apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
-
-        for var in tf.trainable_variables():
-            tf.summary.histogram(var.op.name, var)
-
-        for grad, var in grads:
-            if grad is not None:
-                tf.summary.histogram(var.op.name + '/gradients', grad)
 
         variable_averages = tf.train.ExponentialMovingAverage(0.9999, global_step)
         variables_averages_op = variable_averages.apply(tf.trainable_variables())
@@ -187,7 +172,7 @@ class VGG16:
         config.gpu_options.allow_growth = True
 
         with tf.Session(config=config) as sess:
-            loss, prediction = self._build_network(self._x, self._y, self._is_training)
+            loss, prediction, accu = self._build_network(self._x, self._y, self._is_training)
             train_op = self._train_set(loss, self._global_step)
 
             saver = tf.train.Saver()
@@ -207,34 +192,71 @@ class VGG16:
             accu_summary = tf.summary.scalar("Prediction_accuracy", accu_pl)
 
             for step in range(self._start_step + 1, self._start_step + self._epoch_size + 1):
-                rand_num = random.sample(range(self._raws.shape[0]), self._batch_size)
-                batch_xs, batch_ys = [self._raws[i] for i in rand_num], [self._labels[i] for i in rand_num]
-                _, sum_str, pd, los = sess.run([train_op, summary_op, prediction, loss],
-                                               feed_dict={self._x: batch_xs, self._y: batch_ys,
-                                                          self._keep_prob: self._keep_pb})
-                accuracy, _, _ = per_class_acc(pd, batch_ys)
-                loss_str, accu_str = sess.run([loss_summary, accu_summary],
-                                              feed_dict={loss_pl: los, accu_pl: accuracy})
-                summary_writer.add_summary(sum_str, step)
-                summary_writer.add_summary(loss_str, step)
-                summary_writer.add_summary(accu_str, step)
+                print("Training epoch {0}".format(step))
+                total_batch = len(self._raws)
+                epoch_loss, epoch_accu = np.zeros(total_batch), np.zeros(total_batch)
+                for bat in range(total_batch):
+                    batch_xs = self._raws[bat]
+                    batch_ys = self._labels[bat]
+                    _, sum_str, pd, los, acu = sess.run([train_op, summary_op, prediction, loss, accu],
+                                                   feed_dict={self._x: batch_xs, self._y: batch_ys,
+                                                              self._keep_prob: self._keep_pb,
+                                                              self._is_training: True,
+                                                              self._zeros: np.zeros(batch_ys.shape)})
+                    epoch_loss[bat], epoch_accu[bat], loss_str, accu_str = sess.run([loss_pl, accu_pl, loss_summary,
+                                                                                     accu_summary],
+                                                                                    feed_dict={loss_pl: los,
+                                                                                               accu_pl: acu})
+                    print("Training epoch %d/%d, batch %d/%d, loss %g, accuracy %g" %
+                          (step, self._epoch_size, bat, total_batch, epoch_loss[bat], epoch_accu[bat]))
 
-                if step % 100 == 0:
-                    cnt = int(self._test_raws.shape[0] / self._batch_size)
-                    losses, accu_total, iu, accu_class = np.zeros(cnt), np.zeros(cnt), np.zeros(cnt), np.zeros(
-                        self._classes)
-                    for j in range(cnt):
-                        x_test, y_test = self._test_raws[j * self._batch_size: j * self._batch_size + self._batch_size], \
-                                         self._test_labels[j * self._batch_size: j * self._batch_size + self._batch_size]
-                        pred, losses[j] = sess.run([prediction, loss],
-                                                   feed_dict={self._x: x_test, self._y: y_test, self._keep_prob: 1.0})
-                        accu_total[j], iu[j], accu = per_class_acc(pred, y_test)
-                        accu_class += accu
-                    print("train %d, loss %g, accu %g, mean IU %g" %
-                          (step, np.mean(losses), np.mean(accu_total), np.mean(iu)))
-                    for ii in range(self._classes):
-                        print("\tclass # %d accuracy = %f " % (ii, accu_class[ii] / cnt))
+                print("Training epoch %d/%d finished, loss %g, accuracy %g" %
+                      (step, self._epoch_size, np.mean(epoch_loss), np.mean(epoch_accu)))
+                print("==============================================================")
 
-            print("saving model.....")
-            saver.save(sess, CKPT_PATH)
-            print("end saving....\n")
+                # summary_writer.add_summary(sum_str, step)
+                # summary_writer.add_summary(loss_str, step)
+                # summary_writer.add_summary(accu_str, step)
+
+                if step % 1 == 0:
+                    print("Testing epoch {0}".format(step))
+                    total_batch = len(self._raws)
+                    epoch_loss, epoch_accu = np.zeros(total_batch), np.zeros(total_batch)
+                    for bat in range(total_batch):
+                        batch_xs = self._test_raws[bat]
+                        batch_ys = self._test_labels[bat]
+                        pd, los, acu = sess.run([prediction, loss, accu],
+                                                feed_dict={self._x: batch_xs, self._y: batch_ys,
+                                                                       self._keep_prob: 1.0,
+                                                                       self._is_training: False,
+                                                                       self._zeros: np.zeros(batch_ys.shape)})
+                        epoch_loss[bat], epoch_accu[bat], loss_str, accu_str = sess.run([loss_pl, accu_pl, loss_summary,
+                                                                                         accu_summary],
+                                                                                        feed_dict={loss_pl: los,
+                                                                                                   accu_pl: acu})
+                        print("Testing epoch %d/%d, batch %d/%d, loss %g, accuracy %g" %
+                              (step, self._epoch_size, bat, total_batch, epoch_loss[bat], epoch_accu[bat]))
+
+                    print("Testing epoch %d/%d finished, loss %g, accuracy %g" %
+                          (step, self._epoch_size, np.mean(epoch_loss), np.mean(epoch_accu)))
+                    print("==============================================================")
+
+                    # cnt = int(self._test_raws.shape[0] / self._batch_size)
+                    # losses, accu_total, iu, accu_class = np.zeros(cnt), np.zeros(cnt), np.zeros(cnt), np.zeros(
+                    #     self._classes)
+                    # for j in range(cnt):
+                    #     x_test = [self._test_raws[i] for i in range(j * self._batch_size, (j + 1) * self._batch_size)]
+                    #     y_test = [self._test_labels[i] for i in range(j * self._batch_size, (j + 1) * self._batch_size)]
+                    #     pred, losses[j] = sess.run([prediction, loss],
+                    #                                feed_dict={self._x: x_test, self._y: y_test, self._keep_prob: 1.0,
+                    #                                           self._zeros: np.zeros(y_test.shape)})
+                    #     accu_total[j], iu[j], accu = per_class_acc(pred, y_test)
+                    #     accu_class += accu
+                    # print("train %d, loss %g, accu %g, mean IU %g" %
+                    #       (step, np.mean(losses), np.mean(accu_total), np.mean(iu)))
+                    # for ii in range(self._classes):
+                    #     print("\tclass # %d accuracy = %f " % (ii, accu_class[ii] / cnt))
+
+                print("saving model.....")
+                saver.save(sess, CKPT_PATH)
+                print("end saving....\n")

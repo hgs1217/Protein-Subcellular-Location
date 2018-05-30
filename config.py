@@ -5,7 +5,7 @@
 Configure parameters (path, constant, ...)
 """
 
-CKPT_PATH = "D:/Computer Science/Github/Protein-Subcellular-Location/model"
+CKPT_PATH = "D:/Computer Science/Github/Protein-Subcellular-Location/model/model.ckpt"
 LOG_PATH = "D:/Computer Science/Github/Protein-Subcellular-Location/log"
 
 DATASET_PATH = "D:/Computer Science/dataset/HPA_ieee"

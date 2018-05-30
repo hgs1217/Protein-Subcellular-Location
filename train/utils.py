@@ -24,3 +24,12 @@ def per_class_acc(predictions, label_tensor):
         else:
             acc[ii] = np.diag(hist)[ii] / float(hist.sum(1)[ii])
     return np.nanmean(acc_total), np.nanmean(iu), acc
+
+
+if __name__ == '__main__':
+    # a = np.array((4, 3))
+    # b = np.array([[4,5,6], [5,6,7]])
+    # print(b.shape)
+    # a[:2, :] = b[:, :]
+    # print(np.mean(b, axis=1, keepdims=True))
+    print([[0] for _ in range(5)])
