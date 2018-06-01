@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-  
 """
 @author: Suibin Sun
-@file: image_slicer.py
+@file: image_preprocessor.py
 @time: 2018/5/9 16:17
 
 Usage:
@@ -98,6 +98,7 @@ class ImagePreprocessor(object):
         :return:
         """
         sets = os.listdir(self.__data_dir)
+        sets = [a_set for a_set in sets if a_set.startswith('liver_ENSG')]
         total = len(sets)
         count = 1
         for a_set in sets:
@@ -132,6 +133,7 @@ class ImagePreprocessor(object):
                 cv_data is in the shape of (3*3000*3000*3)
         """
         dir_sets = os.listdir(self.__data_dir)
+        dir_sets = [a_set for a_set in dir_sets if a_set.startswith('liver_ENSG')]
 
         xlsx_path = os.path.join(self.__base_dir, 'data_label.xlsx')
         book_sheet = xlrd.open_workbook(xlsx_path).sheet_by_index(0)
@@ -258,6 +260,7 @@ class ImagePreprocessor(object):
         if size is not None:
             self.__set_width(int(int(size) / 2))
         dir_sets = os.listdir(self.__data_dir)
+        dir_sets = [a_set for a_set in dir_sets if a_set.startswith('liver_ENSG')]
 
         xlsx_path = os.path.join(self.__base_dir, 'data_label.xlsx')
         book_sheet = xlrd.open_workbook(xlsx_path).sheet_by_index(0)
@@ -365,6 +368,7 @@ if __name__ == '__main__':
     # image_pre.generate_patches()
     # for l1, l2, d in image_pre.get_dataset_patched(size=20, data_selection='all', label_type='int', exist='new'):
     #     print(l1, l2, len(d), numpy.array(d).shape)
-    l1, l2, d = image_pre.get_dataset_patched(size=20, data_selection='all', label_type='int', exist='new')
-    for i in range(len(l1)):
-        print(len(l1[i]), len(l2[i]), numpy.array(d[i]).shape)
+    count = 0
+    for l1, l2, d in image_pre.get_dataset_full(data_selection='all', label_type='int'):
+        print(len(l1), len(l2), numpy.array(d).shape, count)
+        count += 1
