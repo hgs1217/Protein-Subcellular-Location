@@ -2,48 +2,80 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:34
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-05-29 12:35:00
+# @Last Modified time: 2018-06-01 16:36:15
+
+import numpy as np
+import itertools
 
 import _import_helper
 from data_process.image_preprocessor import ImagePreprocessor
+from config import config
 
-import numpy as np
+def branch_tee(generator, condition_func):
+    gen_true, gen_false = itertools.tee(generator)
+    gen_true  = filter(lambda val: condition_func(val), gen_true)
+    gen_false = filter(lambda val: not condition_func(val), gen_false)
+    return gen_true, gen_false
 
-def get_data():
-    """
-    Wrapper around ImagePreprocessor
-    Goodbye OOP
-    """
-    import os
-    base_dir = os.path.join(os.path.dirname(__file__), '..', 'data_process', 'HPA_ieee')
-    p = ImagePreprocessor(base_dir=base_dir)
 
-    label_dict = {}
-    label_dict_max_size =  30
-    for label1, label2, imgs in p.get_dataset_full(data_selection='all'):
-        labels = set(filter(None, (label1 + ';' + label2).split(';')))
-        label_vec = [0] * label_dict_max_size
-        for l in labels:
-            label_dict.setdefault(l, len(label_dict))
-            label_vec[label_dict[l]] = 1
-        for img in imgs:
-            print('yielded')
-            yield img.astype(np.float32), label_vec
+class DataGenerator:
+    def __init__(self):
+        self._reload()
+
+    def _reload(self):
+        mesh_grid = list(itertools.product(*[
+                range(config.padding, config.img_size - config.padding - config.patch_size, config.stride),
+            ] * 2))
+
+        def make_patches(img):
+            return np.stack([
+                img[r:r+config.patch_size, c:c+config.patch_size] for r,c in mesh_grid
+            ])
+
+        _data = ImagePreprocessor(base_dir=config.dataset_dir).get_dataset_full(data_selection='all', label_type='non-str')
+        def _generate_raw_data():
+            for label1, label2, imgs in _data:
+                label = 0 in (label1 + label2)
+
+                for img in imgs:
+                    img = np.mean(img.astype(np.float32), axis=-1) # convert to gray scale
+                    features = make_patches(img)
+
+                    yield features, label
+
+        gen = _generate_raw_data()
+        self._pos_gen, self._neg_gen = branch_tee(gen, lambda val: val[1] is True)
+
+    def _auto_reload(self, gen):
+        while True:
+            for val in gen: yield val
+            self._reload()
+
+    def pos_data_gen(self):
+        return self._auto_reload(self._pos_gen)
+
+    def neg_data_gen(self):
+        return self._auto_reload(self._neg_gen)
 
 
 import tensorflow as tf
-
 def make_dataset():
-    def feed_dataset(batch_size, training):
-        ds = tf.data.Dataset.from_generator(
-                get_data,
+    def feed_dataset(training):
+        dg = DataGenerator()
+
+        ds_type_arg = (
                 (tf.float32, tf.int64),
-                (tf.TensorShape([3000, 3000, 3]), tf.TensorShape([None]))
+                (tf.TensorShape([None, config.patch_size, config.patch_size]), tf.TensorShape([]))
             )
-        if training:
-            ds = ds.shuffle(100)
-            ds = ds.repeat()
-        ds = ds.batch(batch_size)
+
+        ds_pos = tf.data.Dataset.from_generator(dg.pos_data_gen, *ds_type_arg)
+        ds_neg = tf.data.Dataset.from_generator(dg.neg_data_gen, *ds_type_arg)
+        ds = tf.data.Dataset.zip((ds_pos, ds_neg)).map(
+                lambda d_pos, d_neg: (tf.stack((d_pos[0], d_neg[0])), tf.stack((d_pos[1], d_neg[1])))
+                # d_pos: (feature1,`True`)
+                # d_neg: (feature2,`False`)
+                # @return: ([feature1, feature2], [`True`, `False`])
+            )
         return ds
 
     return feed_dataset
