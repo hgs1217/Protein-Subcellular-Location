@@ -11,151 +11,38 @@ import numpy as np
 import tensorflow as tf
 
 from config import CKPT_PATH, LOG_PATH, DATASET_PATH
-from train.utils import per_class_acc
+from train.utils import per_class_acc, variable_with_weight_decay, add_loss_summaries, \
+    conv_layer, avg_pool_layer, fc_layer, weighted_loss
 from data_process.image_preprocessor import ImagePreprocessor
-
-
-def variable_with_weight_decay(name, shape, initializer, wd=None):
-    """
-    Create a variable with weight decay
-    """
-    var = tf.get_variable(name, shape, initializer=initializer)
-    if wd is not None:
-        weight_decay = tf.multiply(tf.nn.l2_loss(var), wd, name='weight_loss')
-        tf.add_to_collection('losses', weight_decay)
-    return var
-
-
-def add_loss_summaries(total_loss):
-    """
-    Loss summaries used in tensorboard
-    """
-    loss_averages = tf.train.ExponentialMovingAverage(0.9, name='avg')
-    losses = tf.get_collection('losses')
-    loss_averages_op = loss_averages.apply(losses + [total_loss])
-
-    for l in losses + [total_loss]:
-        tf.summary.scalar(l.op.name + ' (raw)', l)
-        tf.summary.scalar(l.op.name, loss_averages.average(l))
-
-    return loss_averages_op
-
-
-def batch_norm_layer(x, is_training):
-    """
-    BN layer, used for regularization.
-    """
-    x_shape = x.get_shape()
-    params_shape = x_shape[-1:]
-
-    axis = list(range(len(x_shape) - 1))
-
-    beta = variable_with_weight_decay('beta', params_shape, initializer=tf.truncated_normal_initializer())
-    gamma = variable_with_weight_decay('gamma', params_shape, initializer=tf.truncated_normal_initializer())
-
-    batch_mean, batch_var = tf.nn.moments(x, axis, name='moments')
-    ema = tf.train.ExponentialMovingAverage(decay=0.5)
-
-    def mean_var_with_update():
-        ema_apply_op = ema.apply([batch_mean, batch_var])
-        with tf.control_dependencies([ema_apply_op]):
-            return tf.identity(batch_mean), tf.identity(batch_var)
-
-    mean, var = tf.cond(is_training, mean_var_with_update,
-                        lambda: (ema.average(batch_mean), ema.average(batch_var)))
-    normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-3)
-    return normed
-
-
-def conv2d(x, w, stride, padding='SAME'):
-    return tf.nn.conv2d(x, w, strides=[1, stride, stride, 1], padding=padding)
-
-
-def conv_layer(x, ksize, stride, feature_num, is_training, name=None, padding="SAME", groups=1):
-    """
-    Convolutional layer.
-    :param x:
-    :param ksize: kernel size
-    :param stride:
-    :param feature_num: output feature number
-    :param is_training:
-    :param name:
-    :param padding: convolutional padding mode
-    :param groups: convolutional groups split
-    :return:
-    """
-    with tf.variable_scope(name) as scope:
-        w = tf.get_variable("w", [ksize, ksize, int(x.get_shape()[-1]) / groups, feature_num], dtype="float")
-        b = tf.get_variable("b", [feature_num], dtype="float")
-
-        x_split = tf.split(x, groups, 3)
-        w_split = tf.split(w, groups, 3)
-
-        feature_map_list = [conv2d(x_, w_, stride, padding) for x_, w_ in zip(x_split, w_split)]
-        feature_map = tf.concat(feature_map_list, 3)
-
-        out = tf.nn.bias_add(feature_map, b)
-        norm = batch_norm_layer(out, is_training)
-        feature_shape = list(map(lambda x: -1 if not x else x, feature_map.get_shape().as_list()))
-        return tf.nn.relu(tf.reshape(norm, feature_shape), name=scope.name)
-
-
-def avg_pool_layer(x, ksize, stride, name=None, padding="SAME"):
-    """
-    Average pooling layer
-    :param x:
-    :param ksize: kernel size
-    :param stride:
-    :param name:
-    :param padding: padding mode
-    :return:
-    """
-    return tf.nn.avg_pool(x, ksize=[1, ksize, ksize, 1],
-                          strides=[1, stride, stride, 1], padding=padding, name=name)
-
-
-def fc_layer(x, feature_num, is_training, name=None, relu_flag=True):
-    """
-    Full connected layer
-    :param x:
-    :param feature_num: Output feature numbers
-    :param is_training:
-    :param name:
-    :param relu_flag: whether need relu activation
-    :return:
-    """
-    with tf.variable_scope(name) as scope:
-        w = variable_with_weight_decay('w', shape=[x.get_shape()[-1], feature_num],
-                                       initializer=tf.orthogonal_initializer(), wd=None)
-        b = tf.get_variable("b", [feature_num], initializer=tf.constant_initializer(0.0))
-        bias = tf.nn.bias_add(tf.matmul(x, w), b)
-        norm = batch_norm_layer(bias, is_training)
-        return tf.nn.relu(norm) if relu_flag else norm
-
-
-def weighted_loss(lgts, lbs, num_classes, loss_array):
-    """
-    Weight loss function calculation. We have loss weights to different labels
-    :param lgts: outputs
-    :param lbs: labels
-    :param num_classes: label class number
-    :param loss_array: loss weights array
-    :return:
-    """
-    with tf.name_scope('loss'):
-        epsilon = tf.constant(value=1e-10)
-        labels = lbs
-        logits = lgts + epsilon
-
-        cross_entropy = -tf.reduce_sum(tf.multiply(labels * tf.log(tf.nn.softmax(logits) + epsilon),
-                                                   np.array(loss_array)), axis=[2])
-        cross_entropy_mean = tf.reduce_mean(cross_entropy, name='cross_entropy', axis=0)
-        return cross_entropy_mean
 
 
 class CNN:
     def __init__(self, raws, labels, test_raws, test_labels, keep_pb=0.5, batch_size=240, epoch_size=100,
                  learning_rate=0.001, start_step=0, loss_array=None):
+        """
+        Convolutional neural network
+        :param raws: list
+                    Raw data in training set.
+        :param labels: list
+                    Labels in training set.
+        :param test_raws: list
+                    Raw data in test set.
+        :param test_labels: list
+                    Labels in test set.
+        :param keep_pb: float
+                    The keep probabilities used in dropout layers.
+        :param batch_size: int
+                    Batch size.
+        :param epoch_size: int
+                    Epoch size
+        :param learning_rate: float
+                    Learning rate
+        :param start_step: int
+                    Current start step, which is used in further training based on existed model to prevent
+                    the disorder of current epoch.
+        :param loss_array: list
+                    Weight loss array used in loss function.
+        """
         self._raws = raws
         self._labels = labels
         self._test_raws = test_raws
@@ -179,11 +66,14 @@ class CNN:
 
     def _build_network_vgg16(self, x, y, is_training):
         """
-        VGG16 network construction
-        :param x: raw data
-        :param y: labels
-        :param is_training:
-        :return:
+            VGG16 network construction
+            :param x: tensor
+                    Raw data
+            :param y: tensor
+                    Labels given
+            :param is_training: boolean
+                    Whether it is in the training step.
+            :return:
         """
         x_resh = tf.reshape(x, [-1, self._input_width, self._input_height, self._input_channels])
         conv1_1 = conv_layer(x_resh, 3, 1, 128, is_training, name="conv1_1")
@@ -215,11 +105,14 @@ class CNN:
 
     def _build_network_lenet(self, x, y, is_training):
         """
-        Lenet network construction
-        :param x: raw data
-        :param y: labels
-        :param is_training:
-        :return:
+            Lenet network construction
+            :param x: tensor
+                    Raw data
+            :param y: tensor
+                    Labels given
+            :param is_training: boolean
+                    Whether it is in the training step.
+            :return:
         """
         x_resh = tf.reshape(x, [-1, self._input_width, self._input_height, self._input_channels])
         outfc = []
@@ -245,10 +138,10 @@ class CNN:
 
     def _train_set(self, total_loss, global_step):
         """
-        Training operation settings, including optimizer and so on.
-        :param total_loss:
-        :param global_step:
-        :return:
+            Training operation settings, including optimizer and so on.
+            :param total_loss: list, [label number]
+            :param global_step:
+            :return: train_op
         """
         train_op = [0 for _ in range(self._label_nums)]
         for i in range(self._label_nums):   # We train the six labels at the same time
@@ -270,12 +163,16 @@ class CNN:
 
     def _print_class_accu(self, epoch_loss, epoch_accu):
         """
-        Print class accuracy
+            Print class accuracy
         """
         for i in range(self._label_nums):
             print("\tlabel class %d, loss %g accu %g" % (i, epoch_loss[i], epoch_accu[i]))
 
     def train(self):
+        """
+            The main training process.
+            :return:
+        """
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
 
