@@ -227,27 +227,27 @@ class CNN:
                 if step % 1 == 0:
                     print("Testing epoch {0}".format(step))
                     test_batch = len(self._test_raws)
-                    epoch_loss = np.zeros((test_batch, self._label_nums))
-                    epoch_accu = np.zeros((test_batch, self._label_nums))
-                    epoch_total_accu = np.zeros(total_batch)
+                    test_loss = np.zeros((test_batch, self._label_nums))
+                    test_accu = np.zeros((test_batch, self._label_nums))
+                    test_total_accu = np.zeros(test_batch)
 
                     for bat in range(test_batch):
                         batch_xs = self._test_raws[bat]
                         batch_ys = self._test_labels[bat]
-                        pd, epoch_loss[bat, :], epoch_accu[bat, :], loss_str, accu_str = sess.run(
+                        pd, test_loss[bat, :], test_accu[bat, :], loss_str, accu_str = sess.run(
                             [prediction, loss, accu, loss_summary, accu_summary],
                             feed_dict={self._x: batch_xs, self._y: batch_ys, self._keep_prob: 1.0,
                                        self._is_training: False})
-                        epoch_total_accu[bat] = np.mean(np.prod(epoch_accu[bat], axis=0))
+                        test_total_accu[bat] = np.mean(np.prod(test_accu[bat], axis=0))
                         print("Testing epoch %d/%d, batch %d/%d, loss %g, accuracy %g" %
-                              (step, self._epoch_size, bat + 1, test_batch, np.mean(epoch_loss[bat]),
-                               epoch_total_accu[bat]))
+                              (step, self._epoch_size, bat + 1, test_batch, np.mean(test_loss[bat]),
+                               test_total_accu[bat]))
                         if bat % 10 == 9:
-                            self._print_class_accu(epoch_loss[bat], epoch_accu[bat])
+                            self._print_class_accu(test_loss[bat], test_accu[bat])
 
                     print("Testing epoch %d/%d finished, loss %g, accuracy %g" %
-                          (step, self._epoch_size, np.mean(epoch_loss), np.mean(epoch_total_accu)))
-                    self._print_class_accu(np.mean(epoch_loss, axis=0), np.mean(epoch_accu, axis=0))
+                          (step, self._epoch_size, np.mean(test_loss), np.mean(test_total_accu)))
+                    self._print_class_accu(np.mean(test_loss, axis=0), np.mean(test_accu, axis=0))
                     print("==============================================================")
 
                 print("saving model.....")
