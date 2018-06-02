@@ -1,6 +1,7 @@
 model/
 log/
 train/fortest.py
+train/run.py
 config.py
 
 # IDEA

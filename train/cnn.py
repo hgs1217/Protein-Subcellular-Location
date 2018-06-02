@@ -199,6 +199,7 @@ class CNN:
                 total_batch = len(self._raws)
                 epoch_loss = np.zeros((total_batch, self._label_nums))
                 epoch_accu = np.zeros((total_batch, self._label_nums))
+                epoch_total_accu = np.zeros(total_batch)
 
                 for bat in range(total_batch):
                     batch_xs = self._raws[bat]
@@ -207,13 +208,15 @@ class CNN:
                         [train_op, summary_op, prediction, loss, accu, loss_summary, accu_summary],
                         feed_dict={self._x: batch_xs, self._y: batch_ys, self._keep_prob: self._keep_pb,
                                    self._is_training: True})
+                    epoch_total_accu[bat] = np.mean(np.prod(epoch_accu[bat], axis=0))
                     print("Training epoch %d/%d, batch %d/%d, loss %g, accuracy %g" %
-                          (step, self._epoch_size, bat, total_batch, np.mean(epoch_loss[bat]), np.mean(epoch_accu[bat])))
-                    if bat % 10 == 0:
+                          (step, self._epoch_size, bat + 1, total_batch, np.mean(epoch_loss[bat]),
+                           epoch_total_accu[bat]))
+                    if bat % 10 == 9:
                         self._print_class_accu(epoch_loss[bat], epoch_accu[bat])
 
                 print("Training epoch %d/%d finished, loss %g, accuracy %g" %
-                      (step, self._epoch_size, np.mean(epoch_loss), np.mean(epoch_accu)))
+                      (step, self._epoch_size, np.mean(epoch_loss), np.mean(epoch_total_accu)))
                 self._print_class_accu(np.mean(epoch_loss, axis=0), np.mean(epoch_accu, axis=0))
                 print("==============================================================")
 
@@ -226,6 +229,8 @@ class CNN:
                     test_batch = len(self._test_raws)
                     epoch_loss = np.zeros((test_batch, self._label_nums))
                     epoch_accu = np.zeros((test_batch, self._label_nums))
+                    epoch_total_accu = np.zeros(total_batch)
+
                     for bat in range(test_batch):
                         batch_xs = self._test_raws[bat]
                         batch_ys = self._test_labels[bat]
@@ -233,13 +238,15 @@ class CNN:
                             [prediction, loss, accu, loss_summary, accu_summary],
                             feed_dict={self._x: batch_xs, self._y: batch_ys, self._keep_prob: 1.0,
                                        self._is_training: False})
+                        epoch_total_accu[bat] = np.mean(np.prod(epoch_accu[bat], axis=0))
                         print("Testing epoch %d/%d, batch %d/%d, loss %g, accuracy %g" %
-                              (step, self._epoch_size, bat, test_batch, np.mean(epoch_loss[bat]), np.mean(epoch_accu[bat])))
-                        if bat % 10 == 0:
+                              (step, self._epoch_size, bat + 1, test_batch, np.mean(epoch_loss[bat]),
+                               epoch_total_accu[bat]))
+                        if bat % 10 == 9:
                             self._print_class_accu(epoch_loss[bat], epoch_accu[bat])
 
                     print("Testing epoch %d/%d finished, loss %g, accuracy %g" %
-                          (step, self._epoch_size, np.mean(epoch_loss), np.mean(epoch_accu)))
+                          (step, self._epoch_size, np.mean(epoch_loss), np.mean(epoch_total_accu)))
                     self._print_class_accu(np.mean(epoch_loss, axis=0), np.mean(epoch_accu, axis=0))
                     print("==============================================================")
 
