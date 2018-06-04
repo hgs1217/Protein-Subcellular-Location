@@ -251,6 +251,6 @@ class CNN:
                     print("==============================================================")
 
                 print("saving model.....")
-                # saver.save(sess, CKPT_PATH)
+                saver.save(sess, CKPT_PATH)
                 time.sleep(10)
                 print("end saving....\n")
