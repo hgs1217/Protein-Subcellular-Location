@@ -10,7 +10,7 @@ TARGET_LABELS = [0, 1, 2, 3, 4, 5]
 TEST_RATIO = 8 / 9
 
 
-def train(simple=False, start_step=0, gpu=True,epoch_size=100, keep_pb=0.5, learning_rate=0.001):
+def train(simple=False, start_step=0, epoch_size=100, keep_pb=0.5, learning_rate=0.001, gpu=True):
     if gpu:
         os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     else:
