@@ -252,7 +252,7 @@ class ImagePreprocessor(object):
                 usable -> data with nonempty labels
         :return: label1, label2, cv_data
                 label string is something like <Nucleus;Cytoplasm;Golgi apparatus> WITHOUT quote
-                cv_data is in the shape of (270*size*size*3)
+                cv_data is in the shape of (500*270*size*size*3)
         """
         label1s = []
         label2s = []

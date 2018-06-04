@@ -16,7 +16,7 @@ def generate_patch():
     image_pre.generate_patches()
 
 
-def data_construction(target_labels, ratio=8/9):
+def data_construction(target_labels, ratio=8 / 9):
     """
         We separate the 500 data folders into 2 groups, 0-250 and 250-500. Since we have 270(180) photos
         each folder, we can cut the dataset into 540 batches. Take the default train-test ratio 8/9 as an
@@ -80,4 +80,44 @@ def data_construction(target_labels, ratio=8/9):
                   for label in label_counter.keys()]
 
     print("Dataset constructed")
+    return raws, labels, test_raws, test_labels, loss_array
+
+
+def data_construction_v2(target_labels, batch_size, ratio=8 / 9):
+    image_pre = ImagePreprocessor(base_dir=DATASET_PATH)
+    l1, l2, d = image_pre.get_dataset_patched(size=20, data_selection='all', label_type='int', exist='new')
+    batch_num = int(500 * 270 / batch_size)  # batch_num=5400 if batch_size=25
+
+    r, l = [[] for _ in range(int(batch_num * 8 / 9))], [[] for _ in range(int(batch_num * 8 / 9))]
+    tr, tl = [[] for _ in range(int(batch_num / 9))], [[] for _ in range(int(batch_num / 9))]
+    label_counter = {target: 0 for target in target_labels}
+
+    for i in range(len(l1)):
+        lbs = set(l1[i] + l2[i])
+        sz = len(d[i])
+        for target in target_labels:
+            if target in lbs:
+                label_counter[target] += 1
+        for j in range(sz):
+            if j < int(sz * ratio):
+                base = 0 if i < int(len(l1) / 2) else int(batch_num * 4 / 9)
+                r[j + base].append(d[i][j])
+                label_array = []
+                for target in target_labels:
+                    label_array.append([1, 0] if target in lbs else [0, 1])
+                l[j + base].append(label_array)
+            else:
+                base = 0 if i < int(len(l1) / 2) else int(batch_num / 18)
+                tr[j + base - int(sz * ratio)].append(d[i][j])
+                label_array = []
+                for target in target_labels:
+                    label_array.append([1, 0] if target in lbs else [0, 1])
+                tl[j + base - int(sz * ratio)].append(label_array)
+
+    raws, labels = [np.array(x) for x in r], [np.array(x) for x in l]
+    test_raws, test_labels = [np.array(x) for x in tr], [np.array(x) for x in tl]
+    loss_array = [[0.5 / (label_counter[label] / len(l1)), 0.5 / (1 - label_counter[label] / len(l1))]
+                  for label in label_counter.keys()]
+
+    print("Dataset constructed with batch size {}".format(batch_size))
     return raws, labels, test_raws, test_labels, loss_array

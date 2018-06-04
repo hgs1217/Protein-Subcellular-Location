@@ -2,7 +2,7 @@
 # @Create Date: 2018/5/28
 
 from train.cnn import CNN
-from data_process.data_preprocessor import generate_patch, data_construction
+from data_process.data_preprocessor import generate_patch, data_construction, data_construction_v2
 
 import os
 
@@ -10,13 +10,16 @@ TARGET_LABELS = [0, 1, 2, 3, 4, 5]
 TEST_RATIO = 8 / 9
 
 
-def train(simple=False, start_step=0, epoch_size=100, keep_pb=0.5, learning_rate=0.001, gpu=True):
+def train(simple=False, start_step=0, epoch_size=100, keep_pb=0.5, learning_rate=0.001, batch_size=None, gpu=True):
     if gpu:
         os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     else:
         os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # use cpu only
 
-    raws, labels, test_raws, test_labels, loss_array = data_construction(TARGET_LABELS, TEST_RATIO)
+    if batch_size is None:
+        raws, labels, test_raws, test_labels, loss_array = data_construction(TARGET_LABELS, TEST_RATIO)
+    else:
+        raws, labels, test_raws, test_labels, loss_array = data_construction_v2(TARGET_LABELS, batch_size, TEST_RATIO)
 
     print(raws[0].shape)
     print(labels[0].shape)
