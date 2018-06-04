@@ -9,7 +9,7 @@ TARGET_LABELS = [0, 1, 2, 3, 4, 5]
 TEST_RATIO = 8 / 9
 
 
-def train(simple=False):
+def train(simple=False, start_step=0):
     raws, labels, test_raws, test_labels, loss_array = data_construction(TARGET_LABELS, TEST_RATIO)
 
     print(raws[0].shape)
@@ -22,5 +22,6 @@ def train(simple=False):
         test_raws = test_raws[:10]
         test_labels = test_labels[:10]
 
-    cnn = CNN(raws, labels, test_raws, test_labels, epoch_size=100, loss_array=loss_array)
+    cnn = CNN(raws, labels, test_raws, test_labels, epoch_size=100, loss_array=loss_array,
+              start_step=start_step)
     cnn.train()
