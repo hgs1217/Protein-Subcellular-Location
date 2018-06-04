@@ -17,7 +17,7 @@ from data_process.image_preprocessor import ImagePreprocessor
 
 
 class CNN:
-    def __init__(self, raws, labels, test_raws, test_labels, keep_pb=0.5, batch_size=240, epoch_size=100,
+    def __init__(self, raws, labels, test_raws, test_labels, keep_pb=0.5, epoch_size=100,
                  learning_rate=0.001, start_step=0, loss_array=None):
         """
         Convolutional neural network
@@ -31,8 +31,6 @@ class CNN:
                     Labels in test set.
         :param keep_pb: float
                     The keep probabilities used in dropout layers.
-        :param batch_size: int
-                    Batch size.
         :param epoch_size: int
                     Epoch size
         :param learning_rate: float
@@ -48,7 +46,6 @@ class CNN:
         self._test_raws = test_raws
         self._test_labels = test_labels
         self._keep_pb = keep_pb
-        self._batch_size = batch_size
         self._epoch_size = epoch_size
         self._start_step = start_step
         self._learning_rate = learning_rate
@@ -64,44 +61,44 @@ class CNN:
         self._is_training = tf.placeholder(tf.bool, name="is_training")
         self._global_step = tf.Variable(0, trainable=False)
 
-    def _build_network_vgg16(self, x, y, is_training):
-        """
-            VGG16 network construction
-            :param x: tensor
-                    Raw data
-            :param y: tensor
-                    Labels given
-            :param is_training: boolean
-                    Whether it is in the training step.
-            :return:
-        """
-        x_resh = tf.reshape(x, [-1, self._input_width, self._input_height, self._input_channels])
-        conv1_1 = conv_layer(x_resh, 3, 1, 128, is_training, name="conv1_1")
-        conv1_2 = conv_layer(conv1_1, 3, 1, 128, is_training, name="conv1_2")
-        pool1 = avg_pool_layer(conv1_2, 2, 2, name="pool1")
-
-        conv2_1 = conv_layer(pool1, 3, 1, 256, is_training, name="conv2_1")
-        conv2_2 = conv_layer(conv2_1, 3, 1, 256, is_training, name="conv2_2")
-        pool2 = avg_pool_layer(conv2_2, 2, 2, name="pool2")
-
-        conv3_1 = conv_layer(pool2, 3, 1, 512, is_training, name="conv3_1")
-        conv3_2 = conv_layer(conv3_1, 3, 1, 512, is_training, name="conv3_2")
-        conv3_3 = conv_layer(conv3_2, 3, 1, 512, is_training, name="conv3_3")
-        pool3 = avg_pool_layer(conv3_3, 2, 2, name="pool3")
-
-        fc_in = tf.reshape(pool3, [-1, 3 * 3 * 512])
-        fc4 = fc_layer(fc_in, 4096, is_training, name="fc4", relu_flag=True)
-        dropout4 = tf.nn.dropout(fc4, self._keep_prob)
-
-        fc5 = fc_layer(dropout4, 4096, is_training, name="fc5", relu_flag=True)
-        dropout5 = tf.nn.dropout(fc5, self._keep_prob)
-
-        fc6 = fc_layer(dropout5, self._classes, is_training, name="fc6", relu_flag=False)
-
-        out = fc6
-        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=out))
-        accu = tf.reduce_mean(tf.cast(tf.equal(tf.round((tf.nn.sigmoid(out) - y) * 1.01), self._zeros), tf.float32))
-        return loss, out, accu
+    # def _build_network_vgg16(self, x, y, is_training):
+    #     """
+    #         VGG16 network construction
+    #         :param x: tensor
+    #                 Raw data
+    #         :param y: tensor
+    #                 Labels given
+    #         :param is_training: boolean
+    #                 Whether it is in the training step.
+    #         :return:
+    #     """
+    #     x_resh = tf.reshape(x, [-1, self._input_width, self._input_height, self._input_channels])
+    #     conv1_1 = conv_layer(x_resh, 3, 1, 128, is_training, name="conv1_1")
+    #     conv1_2 = conv_layer(conv1_1, 3, 1, 128, is_training, name="conv1_2")
+    #     pool1 = avg_pool_layer(conv1_2, 2, 2, name="pool1")
+    #
+    #     conv2_1 = conv_layer(pool1, 3, 1, 256, is_training, name="conv2_1")
+    #     conv2_2 = conv_layer(conv2_1, 3, 1, 256, is_training, name="conv2_2")
+    #     pool2 = avg_pool_layer(conv2_2, 2, 2, name="pool2")
+    #
+    #     conv3_1 = conv_layer(pool2, 3, 1, 512, is_training, name="conv3_1")
+    #     conv3_2 = conv_layer(conv3_1, 3, 1, 512, is_training, name="conv3_2")
+    #     conv3_3 = conv_layer(conv3_2, 3, 1, 512, is_training, name="conv3_3")
+    #     pool3 = avg_pool_layer(conv3_3, 2, 2, name="pool3")
+    #
+    #     fc_in = tf.reshape(pool3, [-1, 3 * 3 * 512])
+    #     fc4 = fc_layer(fc_in, 4096, is_training, name="fc4", relu_flag=True)
+    #     dropout4 = tf.nn.dropout(fc4, self._keep_prob)
+    #
+    #     fc5 = fc_layer(dropout4, 4096, is_training, name="fc5", relu_flag=True)
+    #     dropout5 = tf.nn.dropout(fc5, self._keep_prob)
+    #
+    #     fc6 = fc_layer(dropout5, self._classes, is_training, name="fc6", relu_flag=False)
+    #
+    #     out = fc6
+    #     loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=out))
+    #     accu = tf.reduce_mean(tf.cast(tf.equal(tf.round((tf.nn.sigmoid(out) - y) * 1.01), self._zeros), tf.float32))
+    #     return loss, out, accu
 
     def _build_network_lenet(self, x, y, is_training):
         """
@@ -210,13 +207,14 @@ class CNN:
                                    self._is_training: True})
                     epoch_total_accu[bat] = np.mean(np.prod(epoch_accu[bat], axis=0))
                     print("Training epoch %d/%d, batch %d/%d, loss %g, accuracy %g" %
-                          (step, self._epoch_size, bat + 1, total_batch, np.mean(epoch_loss[bat]),
-                           epoch_total_accu[bat]))
+                          (step, self._start_step + self._epoch_size, bat + 1, total_batch,
+                           np.mean(epoch_loss[bat]), epoch_total_accu[bat]))
                     if bat % 10 == 9:
                         self._print_class_accu(epoch_loss[bat], epoch_accu[bat])
 
                 print("Training epoch %d/%d finished, loss %g, accuracy %g" %
-                      (step, self._epoch_size, np.mean(epoch_loss), np.mean(epoch_total_accu)))
+                      (step, self._start_step + self._epoch_size, np.mean(epoch_loss),
+                       np.mean(epoch_total_accu)))
                 self._print_class_accu(np.mean(epoch_loss, axis=0), np.mean(epoch_accu, axis=0))
                 print("==============================================================")
 
@@ -240,13 +238,14 @@ class CNN:
                                        self._is_training: False})
                         test_total_accu[bat] = np.mean(np.prod(test_accu[bat], axis=0))
                         print("Testing epoch %d/%d, batch %d/%d, loss %g, accuracy %g" %
-                              (step, self._epoch_size, bat + 1, test_batch, np.mean(test_loss[bat]),
-                               test_total_accu[bat]))
+                              (step, self._start_step + self._epoch_size, bat + 1, test_batch,
+                               np.mean(test_loss[bat]), test_total_accu[bat]))
                         if bat % 10 == 9:
                             self._print_class_accu(test_loss[bat], test_accu[bat])
 
                     print("Testing epoch %d/%d finished, loss %g, accuracy %g" %
-                          (step, self._epoch_size, np.mean(test_loss), np.mean(test_total_accu)))
+                          (step, self._start_step + self._epoch_size, np.mean(test_loss),
+                           np.mean(test_total_accu)))
                     self._print_class_accu(np.mean(test_loss, axis=0), np.mean(test_accu, axis=0))
                     print("==============================================================")
 

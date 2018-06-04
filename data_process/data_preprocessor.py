@@ -27,16 +27,17 @@ def data_construction(target_labels, ratio=8/9):
         :param ratio: float, default 0.8888888
                     The ratio of training set over test set.
         :return: raws, labels, test_raws, test_labels, loss_array
-                raws: list, [training set size * photo width * photo height * channels], default
-                    [480 * 20 * 20 * 3]
+                raws: list, [training set size * photo numbers * photo width * photo height * channels],
+                    default [480 * 250 * 20 * 20 * 3]
                     Training set data.
-                labels: list, [training set size * label number * 2], default [480 * 6 * 2]
+                labels: list, [training set size * photo numbers * label number * 2], default
+                    [480 * 250 * 6 * 2]
                     Training set labels. The third dimension is the one hot encoding, so that [1, 0] means
                     inclusion and [0, 1] means exclusion.
-                test_raws: list, [test set size * photo width * photo height * channels], default
-                    [60 * 20 * 20 * 3]
+                test_raws: list, [test set size * photo numbers * photo width * photo height * channels],
+                    default [60 * 250 * 20 * 20 * 3]
                     Test set data.
-                test_labels: list, [test set size * label number * 2], default [60 * 6 * 2]
+                test_labels: list, [test set size * photo numbers * label number * 2], default [60 * 250 * 6 * 2]
                     Test set labels. The shape is the same to @labels.
                 loss_array: list, [label number * 2], default [6 * 2]
                     This is the weight loss matrix, which is used in weighted loss function. The formulation
