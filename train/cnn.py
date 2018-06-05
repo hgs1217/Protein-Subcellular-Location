@@ -179,7 +179,7 @@ class CNN:
             fc3 = fc_layer(fc_in, 1024, is_training, name=label_name+"fc3", relu_flag=True)
             dropout3 = tf.nn.dropout(fc3, self._keep_prob)
 
-            extra_label = tf.cast(tf.argmax(y, 2)[:, 0:i+1], tf.float32)
+            extra_label = tf.cast(tf.argmax(y, 2)[:, 0:i], tf.float32)
             extra_layer = tf.concat([dropout3, extra_label], axis=1)
             fc4 = fc_layer(extra_layer, self._classes, is_training, name=label_name+"fc4", relu_flag=True)
             outfc.append(fc4)
