@@ -10,7 +10,7 @@ import time
 import numpy as np
 import tensorflow as tf
 
-from config import CKPT_PATH, LOG_PATH, DATASET_PATH
+from config import CKPT_PREFIX, CKPT_PATH, LOG_PATH, DATASET_PATH
 from train.utils import per_class_acc, variable_with_weight_decay, add_loss_summaries, \
     conv_layer, avg_pool_layer, fc_layer, weighted_loss
 from data_process.image_preprocessor import ImagePreprocessor
@@ -18,9 +18,11 @@ from data_process.image_preprocessor import ImagePreprocessor
 
 class CNN:
     def __init__(self, raws, labels, test_raws, test_labels, keep_pb=0.5, epoch_size=100,
-                 learning_rate=0.001, start_step=0, loss_array=None):
+                 learning_rate=0.001, start_step=0, loss_array=None, detail_log=False,
+                 open_summary=False, new_ckpt_internal=0):
         """
-        Convolutional neural network
+        Convolutional neural network. Before running, you should modify the configuration first,
+        which is in 'config.py'.
         :param raws: list
                     Raw data in training set.
         :param labels: list
@@ -36,10 +38,20 @@ class CNN:
         :param learning_rate: float
                     Learning rate
         :param start_step: int
-                    Current start step, which is used in further training based on existed model to prevent
-                    the disorder of current epoch.
-        :param loss_array: list
-                    Weight loss array used in loss function.
+                    Current start step, which is used in further training based on existed model to
+                    prevent the disorder of current epoch.
+        :param detail_log: boolean
+                    Whether detailed log is outputed.
+                    If detailed log mode is on, the infomation of each batch will also be printed.
+        :param open_summary: boolean
+                    Whether summary is open.
+                    If summary mode is on, the summary graph and logs will be written into the log
+                    file, which can be shown in tensorboard.
+        :param new_ckpt_internal: int
+                    The epoch internal for new checkpoint file generation.
+                    If set 0, there will only exist one checkpoint file through the whole training.
+                    If set n (n>0), every n step will generate a new checkpoint file. For example,
+                    when n=5, epoch size=100, then 20 checkpoint files will be created all together.
         """
         self._raws = raws
         self._labels = labels
@@ -49,6 +61,9 @@ class CNN:
         self._epoch_size = epoch_size
         self._start_step = start_step
         self._learning_rate = learning_rate
+        self._detail_log = detail_log
+        self._open_summary = open_summary
+        self._new_ckpt_internal = new_ckpt_internal
         self._image_pre = ImagePreprocessor(base_dir=DATASET_PATH)
         [_, self._input_width, self._input_height, self._input_channels] = raws[0].shape
         [_, self._label_nums, self._classes] = labels[0].shape
@@ -187,12 +202,18 @@ class CNN:
             else:
                 sess.run(tf.global_variables_initializer())
 
-            # summary_writer = tf.summary.FileWriter(LOG_PATH, sess.graph)
-            loss_summary = tf.summary.scalar("Average_loss", tf.reduce_mean(loss))
-            accu_summary = tf.summary.scalar("Prediction_accuracy", tf.reduce_mean(accu))
+            if self._open_summary:
+                summary_writer = tf.summary.FileWriter(LOG_PATH, sess.graph)
+
+            loss_pl, test_loss_pl = tf.placeholder(tf.float32), tf.placeholder(tf.float32)
+            accu_pl, test_accu_pl = tf.placeholder(tf.float32), tf.placeholder(tf.float32)
+            loss_summary = tf.summary.scalar("Train_Average_loss", loss_pl)
+            test_loss_summary = tf.summary.scalar("Test_Average_loss", test_loss_pl)
+            accu_summary = tf.summary.scalar("Train_Prediction_accuracy", accu_pl)
+            test_accu_summary = tf.summary.scalar("Test_Prediction_accuracy", test_accu_pl)
 
             for step in range(self._start_step + 1, self._start_step + self._epoch_size + 1):
-                print("Training epoch %d/%d" % (step, self._epoch_size))
+                print("Training epoch %d/%d" % (step, self._start_step + self._epoch_size))
                 total_batch = len(self._raws)
                 epoch_loss = np.zeros((total_batch, self._label_nums))
                 epoch_accu = np.zeros((total_batch, self._label_nums))
@@ -201,29 +222,33 @@ class CNN:
                 for bat in range(total_batch):
                     batch_xs = self._raws[bat]
                     batch_ys = self._labels[bat]
-                    _, sum_str, pd, epoch_loss[bat, :], epoch_accu[bat, :], loss_str, accu_str = sess.run(
-                        [train_op, summary_op, prediction, loss, accu, loss_summary, accu_summary],
+                    _, sum_str, pd, epoch_loss[bat, :], epoch_accu[bat, :] = sess.run(
+                        [train_op, summary_op, prediction, loss, accu],
                         feed_dict={self._x: batch_xs, self._y: batch_ys, self._keep_prob: self._keep_pb,
                                    self._is_training: True})
                     epoch_total_accu[bat] = np.mean(np.prod(epoch_accu[bat], axis=0))
-                    print("Training epoch %d/%d, batch %d/%d, loss %g, accuracy %g" %
-                          (step, self._start_step + self._epoch_size, bat + 1, total_batch,
-                           np.mean(epoch_loss[bat]), epoch_total_accu[bat]))
-                    if bat % 10 == 9:
-                        self._print_class_accu(epoch_loss[bat], epoch_accu[bat])
 
+                    if self._detail_log:
+                        print("Training epoch %d/%d, batch %d/%d, loss %g, accuracy %g" %
+                              (step, self._start_step + self._epoch_size, bat + 1, total_batch,
+                               np.mean(epoch_loss[bat]), epoch_total_accu[bat]))
+                        if bat % 10 == 9:
+                            self._print_class_accu(epoch_loss[bat], epoch_accu[bat])
+
+                avg_loss, avg_accu = np.mean(epoch_loss), np.mean(epoch_total_accu)
                 print("Training epoch %d/%d finished, loss %g, accuracy %g" %
-                      (step, self._start_step + self._epoch_size, np.mean(epoch_loss),
-                       np.mean(epoch_total_accu)))
+                      (step, self._start_step + self._epoch_size, avg_loss, avg_accu))
                 self._print_class_accu(np.mean(epoch_loss, axis=0), np.mean(epoch_accu, axis=0))
                 print("==============================================================")
 
-                # summary_writer.add_summary(sum_str, step)
-                # summary_writer.add_summary(loss_str, step)
-                # summary_writer.add_summary(accu_str, step)
+                if self._open_summary:
+                    loss_str, accu_str = sess.run([loss_summary, accu_summary],
+                                                  feed_dict={loss_pl: avg_loss, accu_pl: avg_accu})
+                    summary_writer.add_summary(loss_str, step)
+                    summary_writer.add_summary(accu_str, step)
 
                 if step % 1 == 0:
-                    print("Testing epoch {0}".format(step))
+                    print("Testing epoch %d/%d" % (step, self._start_step + self._epoch_size))
                     test_batch = len(self._test_raws)
                     test_loss = np.zeros((test_batch, self._label_nums))
                     test_accu = np.zeros((test_batch, self._label_nums))
@@ -232,24 +257,36 @@ class CNN:
                     for bat in range(test_batch):
                         batch_xs = self._test_raws[bat]
                         batch_ys = self._test_labels[bat]
-                        pd, test_loss[bat, :], test_accu[bat, :], loss_str, accu_str = sess.run(
-                            [prediction, loss, accu, loss_summary, accu_summary],
+                        pd, test_loss[bat, :], test_accu[bat, :] = sess.run(
+                            [prediction, loss, accu],
                             feed_dict={self._x: batch_xs, self._y: batch_ys, self._keep_prob: 1.0,
                                        self._is_training: False})
                         test_total_accu[bat] = np.mean(np.prod(test_accu[bat], axis=0))
-                        print("Testing epoch %d/%d, batch %d/%d, loss %g, accuracy %g" %
-                              (step, self._start_step + self._epoch_size, bat + 1, test_batch,
-                               np.mean(test_loss[bat]), test_total_accu[bat]))
-                        if bat % 10 == 9:
-                            self._print_class_accu(test_loss[bat], test_accu[bat])
+                        if self._detail_log:
+                            print("Testing epoch %d/%d, batch %d/%d, loss %g, accuracy %g" %
+                                  (step, self._start_step + self._epoch_size, bat + 1, test_batch,
+                                   np.mean(test_loss[bat]), test_total_accu[bat]))
+                            if bat % 10 == 9:
+                                self._print_class_accu(test_loss[bat], test_accu[bat])
 
+                    test_avg_loss, test_avg_accu = np.mean(test_loss), np.mean(test_total_accu)
                     print("Testing epoch %d/%d finished, loss %g, accuracy %g" %
-                          (step, self._start_step + self._epoch_size, np.mean(test_loss),
-                           np.mean(test_total_accu)))
+                          (step, self._start_step + self._epoch_size, test_avg_loss, test_avg_accu))
                     self._print_class_accu(np.mean(test_loss, axis=0), np.mean(test_accu, axis=0))
                     print("==============================================================")
 
+                    if self._open_summary:
+                        test_loss_str, test_accu_str = sess.run(
+                            [test_loss_summary, test_accu_summary],
+                            feed_dict={test_loss_pl: test_avg_loss, test_accu_pl: test_avg_accu})
+                        summary_writer.add_summary(test_loss_str, step)
+                        summary_writer.add_summary(test_accu_str, step)
+
                 print("saving model.....")
-                saver.save(sess, CKPT_PATH)
-                time.sleep(10)
+                if self._new_ckpt_internal <= 0:
+                    saver.save(sess, CKPT_PATH)
+                else:
+                    path = "{0}{1}/model.ckpt".format(CKPT_PREFIX,
+                                                     int((step - 1) / self._new_ckpt_internal))
+                    saver.save(sess, path)
                 print("end saving....\n")
