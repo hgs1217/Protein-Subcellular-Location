@@ -11,7 +11,7 @@ TEST_RATIO = 8 / 9
 
 
 def train(simple=False, start_step=0, epoch_size=100, keep_pb=0.5, learning_rate=0.001, detail_log=False,
-          open_summary=False, new_ckpt_internal=0, batch_size=None, gpu=True):
+          open_summary=False, new_ckpt_internal=0, batch_size=None, gpu=True, network_mode=None):
     if gpu:
         os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     else:
@@ -34,5 +34,6 @@ def train(simple=False, start_step=0, epoch_size=100, keep_pb=0.5, learning_rate
 
     cnn = CNN(raws, labels, test_raws, test_labels, epoch_size=epoch_size, loss_array=loss_array,
               start_step=start_step, keep_pb=keep_pb, learning_rate=learning_rate,
-              detail_log=detail_log, open_summary=open_summary, new_ckpt_internal=new_ckpt_internal)
+              detail_log=detail_log, open_summary=open_summary, new_ckpt_internal=new_ckpt_internal,
+              network_mode=network_mode)
     cnn.train()

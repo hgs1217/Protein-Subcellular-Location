@@ -19,7 +19,7 @@ from data_process.image_preprocessor import ImagePreprocessor
 class CNN:
     def __init__(self, raws, labels, test_raws, test_labels, keep_pb=0.5, epoch_size=100,
                  learning_rate=0.001, start_step=0, loss_array=None, detail_log=False,
-                 open_summary=False, new_ckpt_internal=0):
+                 open_summary=False, new_ckpt_internal=0, network_mode=None):
         """
         Convolutional neural network. Before running, you should modify the configuration first,
         which is in 'config.py'.
@@ -49,9 +49,14 @@ class CNN:
                     file, which can be shown in tensorboard.
         :param new_ckpt_internal: int
                     The epoch internal for new checkpoint file generation.
+                    If set -1, the checkpoint file will not be saved.
                     If set 0, there will only exist one checkpoint file through the whole training.
                     If set n (n>0), every n step will generate a new checkpoint file. For example,
                     when n=5, epoch size=100, then 20 checkpoint files will be created all together.
+        :param network_mode: string
+                    The network type in training.
+                    If set None(default), use the default Lenet binary relevance classifiers.
+                    If set 'chain', use the Lenet classifier chain.
         """
         self._raws = raws
         self._labels = labels
@@ -64,6 +69,7 @@ class CNN:
         self._detail_log = detail_log
         self._open_summary = open_summary
         self._new_ckpt_internal = new_ckpt_internal
+        self._network_mode = network_mode
         self._image_pre = ImagePreprocessor(base_dir=DATASET_PATH)
         [_, self._input_width, self._input_height, self._input_channels] = raws[0].shape
         [_, self._label_nums, self._classes] = labels[0].shape
@@ -148,6 +154,41 @@ class CNN:
         accu = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(out, 2), tf.argmax(y, 2)), tf.float32), axis=0)
         return loss, out, accu
 
+    def _build_network_lenet_chain(self, x, y, is_training):
+        """
+            Lenet network construction with chain classifier.
+            :param x: tensor
+                    Raw data
+            :param y: tensor
+                    Labels given
+            :param is_training: boolean
+                    Whether it is in the training step.
+            :return:
+        """
+        x_resh = tf.reshape(x, [-1, self._input_width, self._input_height, self._input_channels])
+        outfc = []
+        for i in range(self._label_nums):   # We train the six labels at the same time
+            label_name = "label%d_" % i
+            conv1 = conv_layer(x_resh, 5, 1, 32, is_training, name=label_name+"conv1")
+            pool1 = avg_pool_layer(conv1, 2, 2, name=label_name+"pool1")
+
+            conv2 = conv_layer(pool1, 5, 1, 64, is_training, name=label_name+"conv2")
+            pool2 = avg_pool_layer(conv2, 2, 2, name=label_name+"pool2")
+
+            fc_in = tf.reshape(pool2, [-1, 5 * 5 * 64])
+            fc3 = fc_layer(fc_in, 1024, is_training, name=label_name+"fc3", relu_flag=True)
+            dropout3 = tf.nn.dropout(fc3, self._keep_prob)
+
+            extra_label = tf.cast(tf.argmax(y, 2)[:, 0:i+1], tf.float32)
+            extra_layer = tf.concat([dropout3, extra_label], axis=1)
+            fc4 = fc_layer(extra_layer, self._classes, is_training, name=label_name+"fc4", relu_flag=True)
+            outfc.append(fc4)
+
+        out = tf.reshape(tf.concat(outfc, axis=1), [-1, self._label_nums, self._classes])
+        loss = weighted_loss(out, y, self._classes, self._loss_array)
+        accu = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(out, 2), tf.argmax(y, 2)), tf.float32), axis=0)
+        return loss, out, accu
+
     def _train_set(self, total_loss, global_step):
         """
             Training operation settings, including optimizer and so on.
@@ -189,7 +230,10 @@ class CNN:
         config.gpu_options.allow_growth = True
 
         with tf.Session(config=config) as sess:
-            loss, prediction, accu = self._build_network_lenet(self._x, self._y, self._is_training)
+            if self._network_mode == "chain":
+                loss, prediction, accu = self._build_network_lenet_chain(self._x, self._y, self._is_training)
+            else:
+                loss, prediction, accu = self._build_network_lenet(self._x, self._y, self._is_training)
             train_op = self._train_set(loss, self._global_step)
 
             saver = tf.train.Saver()
@@ -283,9 +327,9 @@ class CNN:
                         summary_writer.add_summary(test_accu_str, step)
 
                 print("saving model.....")
-                if self._new_ckpt_internal <= 0:
+                if self._new_ckpt_internal == 0:
                     saver.save(sess, CKPT_PATH)
-                else:
+                elif self._new_ckpt_internal > 0:
                     path = "{0}{1}/model.ckpt".format(CKPT_PREFIX,
                                                      int((step - 1) / self._new_ckpt_internal))
                     saver.save(sess, path)
