@@ -106,6 +106,17 @@ class ImagePreprocessor(object):
             self.__generate_slices_a_set(a_set)
             count += 1
 
+    def generate_augment_patches(self):
+        """
+        Generate augment patches, including another 7 copies: 3*rotation + 4*relative flip
+        :return:
+        """
+        # sets = os.listdir(self.__data_dir)
+        # sets = [a_set for a_set in sets if a_set.startswith('liver_ENSG')]
+        # total = len(sets)
+        # count = 1
+        # for a_set in sets:
+
     def __get_full_a_set(self, set_id):
         """
         :param set_id: folder name of an data instance, like 'liver_ENSG00000004975_22914'
