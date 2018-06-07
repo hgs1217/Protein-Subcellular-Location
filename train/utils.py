@@ -180,6 +180,10 @@ def weighted_loss(lgts, lbs, num_classes, loss_array):
         return cross_entropy_mean
 
 
+def norm_layer(x, lsize, bias=1.0, alpha=0.001 / 9, beta=0.75):
+    return tf.nn.lrn(x, lsize, bias=bias, alpha=alpha, beta=beta)
+
+
 def fast_hist(a, b, n):
     k = (a >= 0) & (a < n)
     return np.bincount(n * a[k].astype(int) + b[k], minlength=n ** 2).reshape(n, n)
