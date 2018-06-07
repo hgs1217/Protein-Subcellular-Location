@@ -2,7 +2,7 @@
 # @Create Date: 2018/5/27
 
 """
-VGG-16 train for classification
+CNN train for classification
 """
 
 import random
@@ -121,6 +121,34 @@ class CNN:
     #     accu = tf.reduce_mean(tf.cast(tf.equal(tf.round((tf.nn.sigmoid(out) - y) * 1.01), self._zeros), tf.float32))
     #     return loss, out, accu
 
+    def _get_network_measure(self, y, out):
+        """
+            Get some measure metrics of the network
+            :param y: tensor, [batch_size, label_num, class_num]
+                    Labels given
+            :param out: tensor, [batch_size, label_num, class_num]
+                    Predictions given by network
+            :return: accu, precision, recall, f1
+                    accu: tensor, [batch_size]
+                        Strict accuracy. Only when all labels are correct ranks accurate.
+                    precision: tensor, [batch_size]
+                        True positive / (True positive + False negative)
+                    recall: tensor, [batch_size]
+                        True positive / (True positive + False positive)
+                    f1: tensor, [batch_size]
+                        Harmonic mean of precision and recall
+        """
+        accu = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(out, 2), tf.argmax(y, 2)), tf.float32), axis=0)
+
+        pn = tf.cast(2 * tf.argmax(out, 2) + tf.argmax(y, 2), tf.int32)
+        counter = tf.cast(tf.concat(tf.map_fn(lambda t: tf.bincount(t, minlength=4), pn), axis=0), tf.float32)
+        epsilon = 1e-10 * tf.ones(tf.shape(counter[:, 0]))
+        precision = counter[:, 0] / (counter[:, 0] + counter[:, 2] + epsilon)
+        recall = counter[:, 0] / (counter[:, 0] + counter[:, 1] + epsilon)
+        f1 = 2 * precision * recall / (precision + recall + epsilon)
+
+        return accu, precision, recall, f1
+
     def _build_network_lenet(self, x, y, is_training):
         """
             Lenet network construction
@@ -151,8 +179,9 @@ class CNN:
 
         out = tf.reshape(tf.concat(outfc, axis=1), [-1, self._label_nums, self._classes])
         loss = weighted_loss(out, y, self._classes, self._loss_array)
-        accu = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(out, 2), tf.argmax(y, 2)), tf.float32), axis=0)
-        return loss, out, accu
+        accu, precision, recall, f1 = self._get_network_measure(y, out)
+
+        return loss, out, accu, precision, recall, f1
 
     def _build_network_lenet_chain(self, x, y, is_training):
         """
@@ -186,8 +215,9 @@ class CNN:
 
         out = tf.reshape(tf.concat(outfc, axis=1), [-1, self._label_nums, self._classes])
         loss = weighted_loss(out, y, self._classes, self._loss_array)
-        accu = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(out, 2), tf.argmax(y, 2)), tf.float32), axis=0)
-        return loss, out, accu
+        accu, precision, recall, f1 = self._get_network_measure(y, out)
+
+        return loss, out, accu, precision, recall, f1
 
     def _train_set(self, total_loss, global_step):
         """
@@ -231,9 +261,11 @@ class CNN:
 
         with tf.Session(config=config) as sess:
             if self._network_mode == "chain":
-                loss, prediction, accu = self._build_network_lenet_chain(self._x, self._y, self._is_training)
+                loss, prediction, accu, precision, recall, f1 = self._build_network_lenet_chain(self._x, self._y,
+                                                                                                self._is_training)
             else:
-                loss, prediction, accu = self._build_network_lenet(self._x, self._y, self._is_training)
+                loss, prediction, accu, precision, recall, f1 = self._build_network_lenet(self._x, self._y,
+                                                                                          self._is_training)
             train_op = self._train_set(loss, self._global_step)
 
             saver = tf.train.Saver()
@@ -250,87 +282,95 @@ class CNN:
                 summary_writer = tf.summary.FileWriter(LOG_PATH, sess.graph)
 
             loss_pl, test_loss_pl = tf.placeholder(tf.float32), tf.placeholder(tf.float32)
-            accu_pl, test_accu_pl = tf.placeholder(tf.float32), tf.placeholder(tf.float32)
-            loss_summary = tf.summary.scalar("Train_Average_loss", loss_pl)
-            test_loss_summary = tf.summary.scalar("Test_Average_loss", test_loss_pl)
-            accu_summary = tf.summary.scalar("Train_Prediction_accuracy", accu_pl)
-            test_accu_summary = tf.summary.scalar("Test_Prediction_accuracy", test_accu_pl)
+            f1_pl, test_f1_pl = tf.placeholder(tf.float32), tf.placeholder(tf.float32)
+            loss_summary = tf.summary.scalar("Train_Average_Loss", loss_pl)
+            test_loss_summary = tf.summary.scalar("Test_Average_Loss", test_loss_pl)
+            f1_summary = tf.summary.scalar("Train_Prediction_F1", f1_pl)
+            test_f1_summary = tf.summary.scalar("Test_Prediction_F1", test_f1_pl)
 
             for step in range(self._start_step + 1, self._start_step + self._epoch_size + 1):
                 print("Training epoch %d/%d" % (step, self._start_step + self._epoch_size))
                 total_batch = len(self._raws)
                 epoch_loss = np.zeros((total_batch, self._label_nums))
                 epoch_accu = np.zeros((total_batch, self._label_nums))
-                epoch_total_accu = np.zeros(total_batch)
+                epoch_total_data = np.zeros((total_batch, 5))
 
                 for bat in range(total_batch):
                     batch_xs = self._raws[bat]
                     batch_ys = self._labels[bat]
-                    _, sum_str, pd, epoch_loss[bat, :], epoch_accu[bat, :] = sess.run(
-                        [train_op, summary_op, prediction, loss, accu],
+                    _, sum_str, pd, epoch_loss[bat, :], epoch_accu[bat, :], prec, rec, f = sess.run(
+                        [train_op, summary_op, prediction, loss, accu, precision, recall, f1],
                         feed_dict={self._x: batch_xs, self._y: batch_ys, self._keep_prob: self._keep_pb,
                                    self._is_training: True})
-                    epoch_total_accu[bat] = np.mean(np.prod(epoch_accu[bat], axis=0))
+                    epoch_total_data[bat, 0] = np.mean(epoch_loss[bat])
+                    epoch_total_data[bat, 1] = np.mean(np.prod(epoch_accu[bat], axis=0))
+                    epoch_total_data[bat, 2:] = np.array(list(map(lambda x: np.mean(x), [prec, rec, f])))
 
                     if self._detail_log:
-                        print("Training epoch %d/%d, batch %d/%d, loss %g, accuracy %g" %
+                        print("Training epoch %d/%d, batch %d/%d, loss %g, accu %g, precision %g, recall %g, f1 %g" %
                               (step, self._start_step + self._epoch_size, bat + 1, total_batch,
-                               np.mean(epoch_loss[bat]), epoch_total_accu[bat]))
+                               epoch_total_data[bat, 0], epoch_total_data[bat, 1], epoch_total_data[bat, 2],
+                               epoch_total_data[bat, 3], epoch_total_data[bat, 4]))
                         if bat % 10 == 9:
                             self._print_class_accu(epoch_loss[bat], epoch_accu[bat])
 
-                avg_loss, avg_accu = np.mean(epoch_loss), np.mean(epoch_total_accu)
-                print("Training epoch %d/%d finished, loss %g, accuracy %g" %
-                      (step, self._start_step + self._epoch_size, avg_loss, avg_accu))
+                avg_data = np.mean(epoch_total_data, axis=0)
+                print("Training epoch %d/%d finished, loss %g, accu %g, precision %g, recall %g, f1 %g" %
+                      (step, self._start_step + self._epoch_size, avg_data[0], avg_data[1], avg_data[2],
+                       avg_data[3], avg_data[4]))
                 self._print_class_accu(np.mean(epoch_loss, axis=0), np.mean(epoch_accu, axis=0))
                 print("==============================================================")
 
                 if self._open_summary:
-                    loss_str, accu_str = sess.run([loss_summary, accu_summary],
-                                                  feed_dict={loss_pl: avg_loss, accu_pl: avg_accu})
+                    loss_str, f1_str = sess.run([loss_summary, f1_summary],
+                                                feed_dict={loss_pl: avg_data[0], f1_pl: avg_data[4]})
                     summary_writer.add_summary(loss_str, step)
-                    summary_writer.add_summary(accu_str, step)
+                    summary_writer.add_summary(f1_str, step)
 
                 if step % 1 == 0:
                     print("Testing epoch %d/%d" % (step, self._start_step + self._epoch_size))
                     test_batch = len(self._test_raws)
                     test_loss = np.zeros((test_batch, self._label_nums))
                     test_accu = np.zeros((test_batch, self._label_nums))
-                    test_total_accu = np.zeros(test_batch)
+                    test_total_data = np.zeros((test_batch, 5))
 
                     for bat in range(test_batch):
                         batch_xs = self._test_raws[bat]
                         batch_ys = self._test_labels[bat]
-                        pd, test_loss[bat, :], test_accu[bat, :] = sess.run(
-                            [prediction, loss, accu],
+                        pd, test_loss[bat, :], test_accu[bat, :], t_prec, t_rec, t_f = sess.run(
+                            [prediction, loss, accu, precision, recall, f1],
                             feed_dict={self._x: batch_xs, self._y: batch_ys, self._keep_prob: 1.0,
                                        self._is_training: False})
-                        test_total_accu[bat] = np.mean(np.prod(test_accu[bat], axis=0))
+                        test_total_data[bat, 0] = np.mean(test_loss[bat])
+                        test_total_data[bat, 1] = np.mean(np.prod(test_accu[bat], axis=0))
+                        test_total_data[bat, 2:] = np.array(list(map(lambda x: np.mean(x), [t_prec, t_rec, t_f])))
+
                         if self._detail_log:
-                            print("Testing epoch %d/%d, batch %d/%d, loss %g, accuracy %g" %
+                            print("Testing epoch %d/%d, batch %d/%d, loss %g, accu %g, precision %g, recall %g, f1 %g" %
                                   (step, self._start_step + self._epoch_size, bat + 1, test_batch,
-                                   np.mean(test_loss[bat]), test_total_accu[bat]))
+                                   test_total_data[bat, 0], test_total_data[bat, 1], test_total_data[bat, 2],
+                                   test_total_data[bat, 3], test_total_data[bat, 4]))
                             if bat % 10 == 9:
                                 self._print_class_accu(test_loss[bat], test_accu[bat])
 
-                    test_avg_loss, test_avg_accu = np.mean(test_loss), np.mean(test_total_accu)
-                    print("Testing epoch %d/%d finished, loss %g, accuracy %g" %
-                          (step, self._start_step + self._epoch_size, test_avg_loss, test_avg_accu))
+                    test_avg_data = np.mean(test_total_data, axis=0)
+                    print("Testing epoch %d/%d finished, loss %g, accu %g, precision %g, recall %g, f1 %g" %
+                          (step, self._start_step + self._epoch_size, test_avg_data[0], test_avg_data[1], test_avg_data[2],
+                           test_avg_data[3], test_avg_data[4]))
                     self._print_class_accu(np.mean(test_loss, axis=0), np.mean(test_accu, axis=0))
                     print("==============================================================")
 
                     if self._open_summary:
-                        test_loss_str, test_accu_str = sess.run(
-                            [test_loss_summary, test_accu_summary],
-                            feed_dict={test_loss_pl: test_avg_loss, test_accu_pl: test_avg_accu})
+                        test_loss_str, test_f1_str = sess.run(
+                            [test_loss_summary, test_f1_summary],
+                            feed_dict={test_loss_pl: test_avg_data[0], test_f1_pl: test_avg_data[4]})
                         summary_writer.add_summary(test_loss_str, step)
-                        summary_writer.add_summary(test_accu_str, step)
+                        summary_writer.add_summary(test_f1_str, step)
 
                 print("saving model.....")
                 if self._new_ckpt_internal == 0:
                     saver.save(sess, CKPT_PATH)
                 elif self._new_ckpt_internal > 0:
-                    path = "{0}{1}/model.ckpt".format(CKPT_PREFIX,
-                                                     int((step - 1) / self._new_ckpt_internal))
+                    path = "{0}{1}/model.ckpt".format(CKPT_PREFIX, int((step - 1) / self._new_ckpt_internal))
                     saver.save(sess, path)
                 print("end saving....\n")

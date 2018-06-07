@@ -1,6 +1,6 @@
 model/
 log/
-train/fortest.py
+temp/
 train/run.py
 config.py
 
