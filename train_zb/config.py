@@ -2,12 +2,14 @@
 # @Author: gigaflw
 # @Date:   2018-06-01 16:25:21
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-01 16:25:30
+# @Last Modified time: 2018-06-17 22:53:28
 
 import os
+
 class config:
     model_dir = None
-    dataset_dir = os.path.join(os.path.dirname(__file__), '..', 'data_process', 'HPA_ieee')
+    base_dataset_dir = os.path.join(os.path.dirname(__file__), '..', 'data_process', 'HPA_ieee')
+    dataset_dir = os.path.join(os.path.dirname(__file__), 'dataset')
 
     # dataset config
     stride = 128

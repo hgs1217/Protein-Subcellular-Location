@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:34
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-01 16:36:15
+# @Last Modified time: 2018-06-17 22:58:32
 
 import numpy as np
 import itertools
@@ -10,6 +10,7 @@ import itertools
 import _import_helper
 from data_process.image_preprocessor import ImagePreprocessor
 from config import config
+from cut_img import cut_img
 
 def branch_tee(generator, condition_func):
     gen_true, gen_false = itertools.tee(generator)
@@ -22,7 +23,41 @@ class DataGenerator:
     def __init__(self):
         self._reload()
 
-    def _reload(self):
+    def img_to_feature(self, img):
+        # img: width x height x 3
+        patches, positions, demo = cut_img(img)
+        patches, positions = map(np.stack, (patches, positions))
+        patches = np.mean(patches.astype(np.float32), axis=-1)   # convert to gray scale
+        # patches: N x width x height
+        # positions: N x 2
+        return patches
+
+    def dump(self):
+        import pickle
+        import cv2
+
+        _data = ImagePreprocessor(base_dir=config.base_dataset_dir).get_dataset_full(data_selection='all', label_type='non-str')
+
+        def get_sample(labels, imgs):
+            patches, positions, demos = zip(*[cut_img(img) for img in imgs])
+            patches = np.vstack([np.stack(p) for p in patches])
+            patches = np.mean(patches.astype(np.float32), axis=-1)   # convert to gray scale
+            return patches, labels, demos
+
+        for ind, (label1, label2, imgs) in enumerate(_data):
+            labels = set(label1) | set(label2)
+            patches, labels, demos = get_sample(labels, imgs)
+
+            with open(config.dataset_dir + f"/sample{ind:04d}", 'bw') as f:
+                pickle.dump({'patches': patches, 'labels': labels}, f)
+
+            for i, demo in enumerate(demos):
+                cv2.imwrite(config.dataset_dir + f"/sample{ind:04d}-demo{i}.jpg", demo)
+
+
+    def _img_to_feature_old(self, img):
+        img = np.mean(img.astype(np.float32), axis=-1) # convert to gray scale
+
         mesh_grid = list(itertools.product(*[
                 range(config.padding, config.img_size - config.padding - config.patch_size, config.stride),
             ] * 2))
@@ -32,15 +67,16 @@ class DataGenerator:
                 img[r:r+config.patch_size, c:c+config.patch_size] for r,c in mesh_grid
             ])
 
-        _data = ImagePreprocessor(base_dir=config.dataset_dir).get_dataset_full(data_selection='all', label_type='non-str')
+        return make_patches(img)
+
+    def _reload(self):
+        _data = ImagePreprocessor(base_dir=config.base_dataset_dir).get_dataset_full(data_selection='all', label_type='non-str')
         def _generate_raw_data():
             for label1, label2, imgs in _data:
                 label = 0 in (label1 + label2)
 
                 for img in imgs:
-                    img = np.mean(img.astype(np.float32), axis=-1) # convert to gray scale
-                    features = make_patches(img)
-
+                    features = self.img_to_feature(img)
                     yield features, label
 
         gen = _generate_raw_data()

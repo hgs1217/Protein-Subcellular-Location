@@ -2,7 +2,9 @@ model/
 log/
 temp/
 train/run.py
+train_zb/dataset
 config.py
+*.bak
 
 # IDEA
 .idea/
