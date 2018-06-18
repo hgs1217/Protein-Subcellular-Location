@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:34
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-18 15:25:37
+# @Last Modified time: 2018-06-18 16:33:32
 
 import numpy as np
 import itertools
@@ -32,32 +32,48 @@ class DataGenerator:
         # positions: N x 2
         return patches
 
-    def dump(self):
-        import pickle
+    def dump(self, patch_size, stride, cut_img_threshold, expected_max_patches_per_img):
+        import pickle, time
         import cv2
 
-        _data = ImagePreprocessor(base_dir=config.base_dataset_dir).get_dataset_full(data_selection='all', label_type='non-str')
+        _data = ImagePreprocessor(base_dir=config.base_dataset_dir).get_dataset_full(data_selection='sup', label_type='non-str')
+        log_file = open(config.dataset_dir/"log.txt", 'w')
+        tic = time.time()
+        print(f"Config: patch_size={patch_size}x{patch_size} stride={stride}x{stride} threshold={cut_img_threshold}", file=log_file)
 
-        def get_sample(labels, imgs):
-            patches, positions, demos = zip(*[cut_img(img) for img in imgs])
-            patches = np.vstack([np.stack(p) for p in patches])
+        def get_sample(imgs):
+            patches, positions, demos = zip(*[cut_img(img,
+                width=patch_size, height=patch_size,
+                xstep=stride, ystep=stride,
+                threshold=cut_img_threshold,
+                write_mode=False, output_folder=None
+            ) for img in imgs])
+            patches = np.vstack([np.stack(p) for p in patches if len(p) > 0])
+
+            # dropout excessive patches to keep the size of dateset reasonable
+            rate = 1 - np.exp(- expected_max_patches_per_img / len(patches))
+            random_choice = np.random.random(len(patches)) < rate
+            patches = patches[random_choice]
             patches = np.mean(patches.astype(np.float32), axis=-1)   # convert to gray scale
-            return patches, labels, demos
+            return patches, demos
 
         for ind, (label1, label2, imgs) in enumerate(_data):
-            print(labels)
             labels = set(l for l in label1 + label2 if l < 6)
-            print(labels)
-            input('next?')
-
-
-            patches, labels, demos = get_sample(labels, imgs)
+            patches, demos = get_sample(imgs)
 
             with open(config.dataset_dir/f"sample{ind:04d}", 'bw') as f:
                 pickle.dump({'patches': patches, 'labels': labels}, f)
 
             for i, demo in enumerate(demos):
-                cv2.imwrite(config.dataset_dir + f"/sample{ind:04d}-demo{i}.jpg", demo)
+                cv2.imwrite(config.dataset_dir/"demo"/f"sample{ind:04d}-{i}.jpg", demo)
+
+            print(f"Dumping sample{ind:04d} with patches: {patches.shape}, labels: {labels}", file=log_file)
+            if ind % 10 == 9:
+                toc = time.time()
+                print(f"Speed: {toc - tic:.3f} sec / {ind + 1} samples = {(toc - tic) / (ind + 1):.3f} sec/samples", file=log_file)
+            log_file.flush()
+        tac = time.time()
+        log_file.close()
 
 
     def _img_to_feature_old(self, img):
@@ -120,3 +136,11 @@ def make_dataset():
         return ds
 
     return feed_dataset
+
+if __name__ == '__main__':
+    DataGenerator().dump(
+        patch_size=32,
+        stride=16,
+        cut_img_threshold=0.9,
+        expected_max_patches_per_img=12000
+    )
