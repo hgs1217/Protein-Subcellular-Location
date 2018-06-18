@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:34
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-17 22:58:32
+# @Last Modified time: 2018-06-18 15:25:37
 
 import numpy as np
 import itertools
@@ -45,10 +45,15 @@ class DataGenerator:
             return patches, labels, demos
 
         for ind, (label1, label2, imgs) in enumerate(_data):
-            labels = set(label1) | set(label2)
+            print(labels)
+            labels = set(l for l in label1 + label2 if l < 6)
+            print(labels)
+            input('next?')
+
+
             patches, labels, demos = get_sample(labels, imgs)
 
-            with open(config.dataset_dir + f"/sample{ind:04d}", 'bw') as f:
+            with open(config.dataset_dir/f"sample{ind:04d}", 'bw') as f:
                 pickle.dump({'patches': patches, 'labels': labels}, f)
 
             for i, demo in enumerate(demos):
