@@ -176,7 +176,7 @@ class ImagePreprocessor(object):
                     label2 = [self.__labels[x] for x in pos2[pos_index].split(';')]
                     yield label1, label2, a_full_set
         elif data_selection == 'sup':
-            suffices = book_sheet.col_values(2)[1:]
+            suffices = book_sheet.col_values(2)[1:] if sets[0] == '基因编号' else book_sheet.col_values(2)
             for i in range(len(reli)):
                 if reli[i] == 'Supportive':
                     a_full_set = self.__get_full_a_set('liver_{}_{}'.format(sets[i], suffices[i][1:-1]))
@@ -187,7 +187,7 @@ class ImagePreprocessor(object):
                         label2 = [self.__labels[x] for x in pos2[i].split(';')]
                         yield label1, label2, a_full_set
         elif data_selection == 'usable':
-            suffices = book_sheet.col_values(2)[1:]
+            suffices = book_sheet.col_values(2)[1:] if sets[0] == '基因编号' else book_sheet.col_values(2)
             for i in range(len(reli)):
                 if reli[i] != '':
                     a_full_set = self.__get_full_a_set('liver_{}_{}'.format(sets[i], suffices[i][1:-1]))
@@ -315,7 +315,7 @@ class ImagePreprocessor(object):
                     label2s.append(label2)
                     cv_data.append(a_full_set)
         elif data_selection == 'sup':
-            suffices = book_sheet.col_values(2)[1:]
+            suffices = book_sheet.col_values(2)[1:] if sets[0] == '基因编号' else book_sheet.col_values(2)
             for i in range(len(reli)):
                 if reli[i] == 'Supportive':
                     if exist is None:
@@ -336,7 +336,7 @@ class ImagePreprocessor(object):
                         label2s.append(label2)
                         cv_data.append(a_full_set)
         elif data_selection == 'usable':
-            suffices = book_sheet.col_values(2)[1:]
+            suffices = book_sheet.col_values(2)[1:] if sets[0] == '基因编号' else book_sheet.col_values(2)
             for i in range(len(reli)):
                 if reli[i] != '':
                     if exist is None:
