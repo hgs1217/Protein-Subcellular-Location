@@ -3,6 +3,7 @@ log/
 temp/
 train/run.py
 train_zb/dataset
+train_zb/ckpt
 config.py
 *.bak
 

@@ -2,56 +2,95 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:30
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-01 16:13:54
+# @Last Modified time: 2018-06-20 13:26:56
 
 import tensorflow as tf
 import numpy as np
-
-def model(features, labels, mode, params):
-    """
-    Interface between logical codes and tensorflow estimator
-    The signature of this function is required by tensorflow
-
-    @params: features: a ndarray in the shape of (1, n_patches, width, height)
-    @params: labels:  a ndarray in the shape of (1, n_patches, )
-    """
-    print(labels)
-    if mode is tf.estimator.ModeKeys.PREDICT:
-
-        net_out = net(features, training=False)
-        return model_predict(net_out, params)
-
-    else:
-
-        net_out = net(features, training=True)
-
-        if mode == tf.estimator.ModeKeys.EVAL:  return model_eval(net_out, labels, params)
-        if mode == tf.estimator.ModeKeys.TRAIN: return model_train(net_out, labels, params)
+from itertools import product
 
 
 def net(val, training=True):
-    val = tf.reshape(val, [2, -1, 32 * 32])
-    val = tf.layers.dense(val, units=1, activation=tf.nn.sigmoid)
-    val = tf.reshape(val, [2, -1])
-    return val
+    conv = tf.layers.conv2d
+    pool = tf.layers.average_pooling2d
+    dense = tf.layers.dense
 
-def model_predict(net_out, params):
-    raise NotImplementedError
-    return tf.estimator.EstimatorSpec(tf.estimator.ModeKeys.PREDICT, predictions=prediction)
+    val =  tf.expand_dims(val, axis=-1)  # insert channel dim -> N  x 32 x 32 x 1
+    val = conv(val, filters=32, kernel_size=5, strides=1, padding='same')   # -> N x 32 x 32 x 32
+    val = pool(val, pool_size=2, strides=2)                                 # -> N x 16 x 16 x 32
+    val = conv(val, filters=64, kernel_size=5, strides=1, padding='same')   # -> N x 16 x 16 x 64
+    val = pool(val, pool_size=2, strides=2)                                 # -> N x 8 x 8 x 64
+    val = conv(val, filters=128, kernel_size=8, strides=1)                  # -> N x 1 x 1 x 128
+    val = tf.layers.flatten(val)                                           # -> N x 128
 
-def model_eval(net_out, labels, params):
-    raise NotImplementedError
-    # pred = tf.argmax(net_out, axis=-1, name='pred')
-    # accuracy = tf.metrics.accuracy(labels=labels, predictions=pred, name='accuracy')
-    # tf.summary.scalar('accuracy', accuracy[1])
-    return tf.estimator.EstimatorSpec(tf.estimator.ModeKeys.EVAL, loss=loss, eval_metric_ops={'accuracy': accuracy})
+    def dnn(val):
+        val = dense(val, units=64, activation=tf.nn.relu)
+        val = dense(val, units=16, activation=tf.nn.relu)
+        val = dense(val, units=1,  activation=tf.nn.sigmoid)             # -> N x 1
+        val = tf.reshape(val, [-1])
+        return val
 
-def model_train(net_out, labels, params):
-    pos_data_out, neg_data_out = net_out[0], net_out[1]
-    pos_max = tf.nn.top_k(pos_data_out, k=1).values
-    neg_max = tf.nn.top_k(neg_data_out, k=1).values
-    loss = 1 - (pos_max - neg_max)
-    tf.identity(loss, name='loss')
+    heads = tf.stack([dnn(val) for _ in range(6)])    # -> 6 x N
+    return heads
+
+def model_train(pos_features, neg_features, label_index, params):
+    assert len(pos_features.shape) == len(neg_features.shape) == 3
+
+    pos_out = net(pos_features)[label_index]
+    neg_out = net(neg_features)[label_index]
+
+    pos_top = tf.reduce_mean(tf.nn.top_k(pos_out, k=params['n_candidates']).values)
+    neg_top = tf.reduce_mean(tf.nn.top_k(neg_out, k=params['n_candidates']).values)
+    loss = 1 - (pos_top - neg_top)
+
+    metrics = {
+        'pos_mean': tf.reduce_mean(pos_out),
+        'pos_max': tf.reduce_max(pos_out),
+        'pos_min': tf.reduce_min(pos_out),
+        'pos_hist': tf.histogram_fixed_width(pos_out, value_range=[0, 1], nbins=10),
+        'pos_top': pos_top,
+        'neg_mean': tf.reduce_mean(neg_out),
+        'neg_max': tf.reduce_max(neg_out),
+        'neg_min': tf.reduce_min(neg_out),
+        'neg_hist': tf.histogram_fixed_width(neg_out, value_range=[0, 1], nbins=10),
+        'neg_top': neg_top,
+        'loss': loss,
+        'pos_shape': tf.shape(pos_features),
+        'neg_shape': tf.shape(neg_features)
+    }
+    metrics = {k: tf.identity(v, name=k) for k,v in metrics.items()}
+
     optimizer = tf.train.AdagradOptimizer(learning_rate=0.1)
     train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
-    return tf.estimator.EstimatorSpec(tf.estimator.ModeKeys.TRAIN, loss=loss, train_op=train_op)
+    return train_op, metrics
+
+def model_eval(features, labels, params):
+    assert len(features.shape) == 3
+
+    net_out = net(features, training=False)
+    net_out_top = tf.nn.top_k(net_out, k=params['n_candidates']).values
+    net_out_top = tf.reduce_mean(net_out_top, axis=-1)
+
+    pred = tf.where(net_out_top < 0.5, tf.zeros(tf.shape(net_out_top)), tf.ones(tf.shape(net_out_top)))
+    pred = tf.cast(pred, tf.int64)
+
+    TP = tf.equal(pred, 1) & tf.equal(labels, 1)
+    TN = tf.equal(pred, 0) & tf.equal(labels, 0)
+    FP = tf.equal(pred, 1) & tf.equal(labels, 0)
+    FN = tf.equal(pred, 0) & tf.equal(labels, 1)
+
+    TP, TN, FP, FN = (tf.reduce_sum(tf.cast(x, tf.int64)) for x in [TP, TN, FP, FN])
+
+    precision = TP / (TP + FP)
+    recall    = TP / (TP + FN)
+    f1score   = 2 * precision * recall / (precision + recall)
+
+    metrics = {
+        'pred': net_out_top,
+        'labels': labels,
+        'precision': precision,
+        'recall': recall,
+        'f1score': f1score
+    }
+    metrics = {k: tf.identity(v, name=k) for k,v in metrics.items()}
+
+    return metrics
