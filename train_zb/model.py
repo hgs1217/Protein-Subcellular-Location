@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:30
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-20 13:26:56
+# @Last Modified time: 2018-06-20 15:14:46
 
 import tensorflow as tf
 import numpy as np
@@ -12,6 +12,7 @@ from itertools import product
 def net(val, training=True):
     conv = tf.layers.conv2d
     pool = tf.layers.average_pooling2d
+    dropout = tf.layers.dropout
     dense = tf.layers.dense
 
     val =  tf.expand_dims(val, axis=-1)  # insert channel dim -> N  x 32 x 32 x 1
@@ -23,6 +24,7 @@ def net(val, training=True):
     val = tf.layers.flatten(val)                                           # -> N x 128
 
     def dnn(val):
+        val = dropout(val, rate=0.5, training=training)
         val = dense(val, units=64, activation=tf.nn.relu)
         val = dense(val, units=16, activation=tf.nn.relu)
         val = dense(val, units=1,  activation=tf.nn.sigmoid)             # -> N x 1

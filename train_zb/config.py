@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-06-01 16:25:21
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-20 13:25:10
+# @Last Modified time: 2018-06-20 15:25:36
 
 import os
 
@@ -21,6 +21,7 @@ class config:
     base_dataset_dir = Path(os.path.dirname(__file__))/'..'/'data_process'/'HPA_ieee'
     dataset_dir = Path(os.path.dirname(__file__))/'dataset'
     ckpt_dir = Path(os.path.dirname(__file__))/'ckpt'
+    summary_dir = Path(os.path.dirname(__file__))/'summary'
     n_labels = 6
 
     # dataset config
@@ -36,4 +37,5 @@ class config:
     # training config
     # shuffle_size = batch_size * 3
     learning_rate = 0.1
-    n_candidates = 1000
+    max_patches_per_sample = 2048
+    n_candidates = int(max_patches_per_sample * 0.2)
