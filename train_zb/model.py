@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:30
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 13:37:03
+# @Last Modified time: 2018-06-21 14:08:27
 
 import tensorflow as tf
 import numpy as np
@@ -35,15 +35,19 @@ def net(val, training=True):
         heads = tf.stack([dnn(val) for _ in range(6)])    # -> 6 x N
     return heads
 
+def try_most_top_k(x, k):
+    k_ = tf.minimum(tf.shape(x)[0], k)
+    return tf.nn.top_k(x, k=k_)
+
 def model_train(lhs_features, lhs_label, rhs_features, rhs_label, params):
     assert len(lhs_features.shape) == len(rhs_features.shape) == 3
 
     lhs_out = net(lhs_features)
-    lhs_top = tf.nn.top_k(lhs_out, k=params['n_candidates']).values
+    lhs_top = try_most_top_k(lhs_out, k=params['n_candidates']).values
     lhs_pred = tf.reduce_mean(lhs_top, axis=-1)
 
     rhs_out = net(rhs_features)
-    rhs_top = tf.nn.top_k(rhs_out, k=params['n_candidates']).values
+    rhs_top = try_most_top_k(rhs_out, k=params['n_candidates']).values
     rhs_pred = tf.reduce_mean(rhs_top, axis=-1)
 
     # lhs_top = tf.reduce_mean(tf.nn.top_k(lhs_out, k=params['n_candidates']).values)
@@ -74,7 +78,7 @@ def model_eval(features, labels, params):
     assert len(features.shape) == 3
 
     net_out = net(features, training=False)
-    net_out_top = tf.nn.top_k(net_out, k=params['n_candidates']).values
+    net_out_top = try_most_top_k(net_out, k=params['n_candidates']).values
     net_out_top = tf.reduce_mean(net_out_top, axis=-1)
 
     pred = tf.where(net_out_top < 0.5, tf.zeros(tf.shape(net_out_top)), tf.ones(tf.shape(net_out_top)))

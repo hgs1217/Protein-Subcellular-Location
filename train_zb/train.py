@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:52:18
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 13:58:57
+# @Last Modified time: 2018-06-21 14:07:04
 # 
 # Raw Dataset: 3 3000x3000 images -> 6 labels
 # My Dataset: 236 samples, each contains 10000 32x32 patches -> 6 labels
@@ -31,7 +31,7 @@ def get_train_op():
         )
 
     lhs, lhs_label, rhs, rhs_label = dataset.make_one_shot_iterator().get_next()
-    ops = model_train(lhs, lhs_label, rhs, rhs_label, params={'n_candidates': config.n_candidates})
+    ops = model_train(lhs, lhs_label, rhs, rhs_label, params={'n_candidates': tf.constant(config.n_candidates)})
     return ops
 
 def get_eval_op():
@@ -44,7 +44,7 @@ def get_eval_op():
         )
 
     X, Y = dataset.make_one_shot_iterator().get_next()
-    ops = model_eval(X, Y, params={'n_candidates': config.n_candidates})
+    ops = model_eval(X, Y, params={'n_candidates': tf.constant(config.n_candidates)})
     return ops
 
 with tf.Session() as sess:
@@ -78,7 +78,7 @@ with tf.Session() as sess:
 
                 log_str = f"* epoch {epoch+1}/{n_epoches} step {step+1}/{n_train_steps}:"
                 for k,v in {
-                    'loss': train_loss,
+                    'loss': f"{result['loss']:.4f}",
                     'lhs_pred': float_list_to_str(result['lhs_pred']),
                     'rhs_pred': float_list_to_str(result['rhs_pred'])
                 }.items():

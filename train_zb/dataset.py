@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:34
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-20 21:24:33
+# @Last Modified time: 2018-06-21 14:04:59
 
 import os, re, pickle, time, itertools, random
 import numpy as np
@@ -54,7 +54,8 @@ class DataGenerator:
 
                 data = pickle.load(open(config.dataset_dir/filename, 'br'))
                 patches = data['patches']
-                if len(patches) < 1500:
+
+                if len(patches) < config.min_patches_per_sample:
                     continue
 
                 if self._max_patches > 0:
