@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:34
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-20 13:30:02
+# @Last Modified time: 2018-06-20 21:24:33
 
 import os, re, pickle, time, itertools, random
 import numpy as np
@@ -28,15 +28,14 @@ class DataGenerator:
         self._shuffle_samples = shuffle_samples
 
         self._current_label_index = 0   # 0 ~ 5
-        self._reload()
 
-    def _reload(self):
+    def _reload(self, name=''):
         if self._dataset == 'dumped':
-            self._reload_from_dumped()
+            self._reload_from_dumped(name)
         else:
-            self._reload_from_images()
+            self._reload_from_images(name)
 
-    def _reload_from_dumped(self):
+    def _reload_from_dumped(self, name):
         sample_files = sorted(f for f in os.listdir(config.dataset_dir) if re.match(r'sample(\d+)_([01]+)', f))
         sample_files = sample_files[self._sample_slice]
 
@@ -55,7 +54,7 @@ class DataGenerator:
 
                 data = pickle.load(open(config.dataset_dir/filename, 'br'))
                 patches = data['patches']
-                if len(patches) < 1000:
+                if len(patches) < 1500:
                     continue
 
                 if self._max_patches > 0:
@@ -66,35 +65,53 @@ class DataGenerator:
                 patches /= 255.0
 
                 # label_index = random.randint(0, config.n_labels-1)
-                print(f"{filename} {len(data['patches'])} -> {len(patches)} patches loaded")
+                print(f"{name}:{filename} {len(data['patches'])} -> {len(patches)} patches loaded")
 
                 labels = [int(l) for l in labels]
                 yield patches, labels
 
-        self._pos_gen = _generate_raw_data(lambda label: label[self._current_label_index] is True)
-        self._neg_gen = _generate_raw_data(lambda label: label[self._current_label_index] is False)
+        self._lhs_gen = _generate_raw_data()
+        self._rhs_gen = _generate_raw_data()
         self._gen = _generate_raw_data()
 
-    def _auto_reload(self, gen):
+    def lhs_data_gen(self):
         while True:
-            for val in gen: yield val
-            self._reload()
+            self._reload(name='lhs')
+            for val in self._lhs_gen: yield val
 
-    def pos_data_gen(self):
-        return self._auto_reload(self._pos_gen)
+    def rhs_data_gen(self):
+        while True:
+            self._reload(name='rhs')
+            for val in self._rhs_gen: yield val
 
-    def neg_data_gen(self):
-        return self._auto_reload(self._neg_gen)
+    def pair_data_gen(self):
+        lhs_gen = self.lhs_data_gen()
+        rhs_gen = self.rhs_data_gen()
 
-    def pos_neg_pair_data_gen(self):
-        for (pos_patches, pos_labels), (neg_patches, neg_labels) in zip(self.pos_data_gen(), self.neg_data_gen()):
-            yield pos_patches, neg_patches, self._current_label_index
+        lhs, rhs = next(lhs_gen), next(rhs_gen)
 
-            self._current_label_index = random.randint(0, 5)
-            print(f"label idnex changed to {self._current_label_index}")
+        while True:
+            if lhs[1] == rhs[1]:    # compare betweeen python lists
+                if random.random() > 0.5:
+                    lhs = next(lhs_gen)
+                else:
+                    rhs = next(rhs_gen)
+            else:
+                yield lhs[0], lhs[1], rhs[0], rhs[1]
+                lhs = next(lhs_gen)
+                rhs = next(rhs_gen)
+
+        # for (pos_patches, pos_labels), (neg_patches, neg_labels) in zip(self.lhs_data_gen(), self.rhs_data_gen()):
+        #     yield pos_patches, neg_patches, self._current_label_index
+
+            # self._current_label_index = random.randint(0, 5)
+            # print(f"label index changed to {self._current_label_index}")
 
     def data_gen(self):
-        return self._auto_reload(self._gen)
+        while True:
+            self._reload(name='nonsplit')
+            for val in self._gen: yield val
+
 
     @staticmethod
     def dump(patch_size, stride, cut_img_threshold, expected_max_patches_per_img):
@@ -115,17 +132,27 @@ class DataGenerator:
             patches = np.vstack([np.stack(p) for p in patches if len(p) > 0])
 
             # dropout excessive patches to keep the size of dateset reasonable
-            rate = 1 - np.exp(-expected_max_patches_per_img / len(patches))
-            random_choice = np.random.random(len(patches)) < rate
-            patches = patches[random_choice]
+            if len(patches) > expected_max_patches_per_img:
+                random_choice = np.zeros(len(patches), dtype=np.bool)
+                random_choice[:expected_max_patches_per_img] = True
+                np.random.shuffle(random_choice)
+                patches = patches[random_choice]
+
+            # rate = 1 - np.exp(-expected_max_patches_per_img / len(patches))
+            # random_choice = np.random.random(len(patches)) < rate
+            
             patches = np.mean(patches.astype(np.float32), axis=-1)   # convert to gray scale
             return patches, demos
 
         for ind, (label1, label2, imgs) in enumerate(_data):
             labels = set(l for l in label1 + label2 if l < config.n_labels)
+            label_str = ''.join(['1' if i in labels else '0' for i in range(config.n_labels)])
             patches, demos = get_sample(imgs)
 
-            with open(config.dataset_dir/f"sample{ind:04d}", 'bw') as f:
+            if patches is None:
+                continue
+
+            with open(config.dataset_dir/f"sample{ind:04d}_{label_str}", 'bw') as f:
                 pickle.dump({'patches': patches, 'labels': labels}, f)
 
             for i, demo in enumerate(demos):
@@ -150,7 +177,7 @@ class DataGenerator:
     #                 yield features, label
 
     #     gen = _generate_raw_data()
-    #     self._pos_gen, self._neg_gen = branch_tee(gen, lambda val: val[1] is True)
+    #     self._lhs_gen, self._rhs_gen = branch_tee(gen, lambda val: val[1] is True)
     #     self._gen = _generate_raw_data()
 
     # def img_to_feature(self, img):
@@ -176,20 +203,21 @@ class DataGenerator:
 
     #     return make_patches(img)
 
-    def make_dataset(self, split_pos_neg):
+    def make_dataset(self, split_lhs_rhs):
         import tensorflow as tf
 
-        if split_pos_neg:
+        if split_lhs_rhs:
             ds_type_arg = (
-                    (tf.float32, tf.float32, tf.int64),
+                    (tf.float32, tf.int64, tf.float32, tf.int64),
                     (
                         tf.TensorShape([None, config.patch_size, config.patch_size]),
+                        tf.TensorShape([6]),
                         tf.TensorShape([None, config.patch_size, config.patch_size]),
-                        tf.TensorShape([])
+                        tf.TensorShape([6])
                     )
                 )
 
-            ds = tf.data.Dataset.from_generator(self.pos_neg_pair_data_gen, *ds_type_arg)
+            ds = tf.data.Dataset.from_generator(self.pair_data_gen, *ds_type_arg)
         else:
             ds_type_arg = (
                     (tf.float32, tf.int64),
@@ -199,11 +227,11 @@ class DataGenerator:
         return ds
 
 if __name__ == '__main__':
-    pass
+    # pass
     # print(make_dataset()(True))
-    # DataGenerator().dump(
-    #     patch_size=32,
-    #     stride=16,
-    #     cut_img_threshold=0.9,
-    #     expected_max_patches_per_img=12000
-    # )
+    DataGenerator.dump(
+        patch_size=32,
+        stride=16,
+        cut_img_threshold=0.9,
+        expected_max_patches_per_img=12000
+    )

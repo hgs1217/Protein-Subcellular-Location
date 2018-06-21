@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-06-01 16:25:21
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-20 15:25:36
+# @Last Modified time: 2018-06-20 20:27:14
 
 import os
 
@@ -30,12 +30,12 @@ class config:
     img_size = 3000
     cut_img_threshold = 0.9
     padding = 750
-    train_samples = [0, 200]
-    eval_samples = [200, 230]
+    train_samples = [30, 230]
+    eval_samples = [0, 30]
     # batch_size = 1024
 
     # training config
     # shuffle_size = batch_size * 3
     learning_rate = 0.1
     max_patches_per_sample = 2048
-    n_candidates = int(max_patches_per_sample * 0.2)
+    n_candidates = int(max_patches_per_sample * 0.8)
