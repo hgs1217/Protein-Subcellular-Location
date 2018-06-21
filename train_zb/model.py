@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:30
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 14:08:27
+# @Last Modified time: 2018-06-21 14:42:29
 
 import tensorflow as tf
 import numpy as np
@@ -39,24 +39,30 @@ def try_most_top_k(x, k):
     k_ = tf.minimum(tf.shape(x)[0], k)
     return tf.nn.top_k(x, k=k_)
 
+def hard_threshold(prob):
+    pred = tf.where(prob < 0.5, tf.zeros(tf.shape(prob)), tf.ones(tf.shape(prob)))
+    return tf.cast(pred, tf.int64)
+
 def model_train(lhs_features, lhs_label, rhs_features, rhs_label, params):
     assert len(lhs_features.shape) == len(rhs_features.shape) == 3
 
     lhs_out = net(lhs_features)
     lhs_top = try_most_top_k(lhs_out, k=params['n_candidates']).values
-    lhs_pred = tf.reduce_mean(lhs_top, axis=-1)
+    lhs_prob = tf.reduce_mean(lhs_top, axis=-1)
+    lhs_pred = hard_threshold(lhs_prob)
 
     rhs_out = net(rhs_features)
     rhs_top = try_most_top_k(rhs_out, k=params['n_candidates']).values
-    rhs_pred = tf.reduce_mean(rhs_top, axis=-1)
+    rhs_prob = tf.reduce_mean(rhs_top, axis=-1)
+    rhs_pred = hard_threshold(rhs_prob)
 
     # lhs_top = tf.reduce_mean(tf.nn.top_k(lhs_out, k=params['n_candidates']).values)
     # rhs_top = tf.reduce_mean(tf.nn.top_k(rhs_out, k=params['n_candidates']).values)
     loss_mask = tf.cast(tf.not_equal(lhs_label, rhs_label), tf.float32)
 
-    loss_lhs = lhs_pred - rhs_pred
-    loss_rhs = rhs_pred - lhs_pred
-    loss = tf.where(tf.equal(lhs_label, 1), 1 - (lhs_pred - rhs_pred), 1 - (rhs_pred - lhs_pred))
+    loss_lhs = lhs_prob - rhs_prob
+    loss_rhs = rhs_prob - lhs_prob
+    loss = tf.where(tf.equal(lhs_label, 1), 1 - (lhs_prob - rhs_prob), 1 - (rhs_prob - lhs_prob))
 
     loss *= loss_mask
     loss = tf.reduce_sum(loss) / tf.reduce_sum(loss_mask)
@@ -64,8 +70,10 @@ def model_train(lhs_features, lhs_label, rhs_features, rhs_label, params):
     optimizer = tf.train.AdagradOptimizer(learning_rate=0.1)
     opt_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
     ops = {
+        'lhs_prob': lhs_prob,
         'lhs_pred': lhs_pred,
         'lhs_label': lhs_label,
+        'rhs_prob': rhs_prob,
         'rhs_pred': rhs_pred,
         'rhs_label': rhs_label,
         'loss': loss,
@@ -80,9 +88,7 @@ def model_eval(features, labels, params):
     net_out = net(features, training=False)
     net_out_top = try_most_top_k(net_out, k=params['n_candidates']).values
     net_out_top = tf.reduce_mean(net_out_top, axis=-1)
-
-    pred = tf.where(net_out_top < 0.5, tf.zeros(tf.shape(net_out_top)), tf.ones(tf.shape(net_out_top)))
-    pred = tf.cast(pred, tf.int64)
+    pred = hard_threshold(net_out_top)
 
     TP = tf.equal(pred, 1) & tf.equal(labels, 1)
     TN = tf.equal(pred, 0) & tf.equal(labels, 0)
@@ -96,7 +102,7 @@ def model_eval(features, labels, params):
     f1score   = 2 / (1 / precision + 1 / recall)
 
     ops = {
-        'logits': net_out_top,
+        'prob': net_out_top,
         'pred': pred,
         'labels': labels,
         'precision': precision,

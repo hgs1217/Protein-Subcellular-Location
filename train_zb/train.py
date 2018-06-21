@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:52:18
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 14:30:35
+# @Last Modified time: 2018-06-21 14:39:56
 # 
 # Raw Dataset: 3 3000x3000 images -> 6 labels
 # My Dataset: 236 samples, each contains 10000 32x32 patches -> 6 labels
@@ -67,8 +67,8 @@ def post_train(result, epoch, step):
     log_str = f"* epoch {epoch+1}/{n_epoches} step {step+1}/{n_train_steps}:"
     for k,v in {
         'loss': f"{result['loss']:.4f}",
-        'lhs_pred': float_list_to_str(result['lhs_pred']),
-        'rhs_pred': float_list_to_str(result['rhs_pred'])
+        'lhs_prob': float_list_to_str(result['lhs_prob']),
+        'rhs_prob': float_list_to_str(result['rhs_prob'])
     }.items():
         log_str += f" {k}={v}"
     print(log_str)
@@ -79,7 +79,7 @@ def post_eval(result, epoch, step):
 
     log_str = f"* epoch {epoch+1}/{n_epoches} sample {i}:"
     for k,v in {
-        'logits': float_list_to_str(result['logits']),
+        'prob': float_list_to_str(result['prob']),
         'pred': result['pred'],
         'labels': result['labels'],
         'prec': f"{result['precision']:.4f}",

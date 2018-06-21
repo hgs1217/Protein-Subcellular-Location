@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-06-21 13:40:51
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 13:54:34
+# @Last Modified time: 2018-06-21 14:37:20
 
 import os
 class Path(str):
@@ -67,7 +67,6 @@ class Timer:
 
     def __exit__(self, exc_type, exc_value, exc_tb):
         self.toc()
-        self.rounds = 1
 
     def __call__(self, rounds=1):
         self.rounds = rounds
