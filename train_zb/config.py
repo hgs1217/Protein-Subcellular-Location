@@ -2,19 +2,10 @@
 # @Author: gigaflw
 # @Date:   2018-06-01 16:25:21
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-20 20:27:14
+# @Last Modified time: 2018-06-21 13:43:02
 
 import os
-
-class Path(str):
-    def __init__(self, path):
-        self.path = path
-
-    def __truediv__(self, path):
-        return Path(os.path.join(self.path, str(path)))
-
-    def __rtruediv__(self, path):
-        return Path(os.path.join(str(path), self.path))
+from util import Path
 
 class config:
     model_dir = None
