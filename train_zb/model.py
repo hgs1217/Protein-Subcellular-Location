@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:30
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 15:18:40
+# @Last Modified time: 2018-06-21 16:58:03
 
 import tensorflow as tf
 import numpy as np
@@ -44,7 +44,7 @@ def hard_threshold(prob):
     pred = tf.where(prob < 0.5, tf.zeros(tf.shape(prob)), tf.ones(tf.shape(prob)))
     return tf.cast(pred, tf.int64)
 
-def model_train(lhs_features, lhs_label, rhs_features, rhs_label, params):
+def model_train_old(lhs_features, lhs_label, rhs_features, rhs_label, params):
     assert len(lhs_features.shape) == len(rhs_features.shape) == 3
 
     lhs_out = net(lhs_features)
@@ -77,6 +77,29 @@ def model_train(lhs_features, lhs_label, rhs_features, rhs_label, params):
         'rhs_prob': rhs_prob,
         'rhs_pred': rhs_pred,
         'rhs_label': rhs_label,
+        'loss': loss,
+        'opt_op': opt_op
+    }
+
+    return ops
+
+def model_train(features, label, params):
+    assert len(features.shape) == 3
+
+    out = net(features)
+    top = try_most_top_k(out, k=params['n_candidates']).values
+    prob = tf.reduce_mean(top, axis=-1)
+    pred = hard_threshold(prob)
+
+    prob_softmax = tf.stack([1-prob, prob], axis=-1)  # 6 x 2
+    loss = tf.losses.sparse_softmax_cross_entropy(label, prob_softmax)
+
+    optimizer = tf.train.AdagradOptimizer(learning_rate=config.learning_rate)
+    opt_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
+    ops = {
+        'prob': prob,
+        'pred': pred,
+        'label': label,
         'loss': loss,
         'opt_op': opt_op
     }

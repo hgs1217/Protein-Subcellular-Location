@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:52:18
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 15:18:13
+# @Last Modified time: 2018-06-21 16:52:39
 # 
 # Raw Dataset: 3 3000x3000 images -> 6 labels
 # My Dataset: 236 samples, each contains 10000 32x32 patches -> 6 labels
@@ -21,7 +21,7 @@ from util import Stat, float_list_to_str, Timer
 from dataset import DataGenerator
 from model import model_train, model_eval
 
-def get_train_op():
+def get_train_op_old():
     dataset = DataGenerator(
             sample_range=config.train_samples,      # we have 236 samples
             shuffle_samples=False,
@@ -32,6 +32,19 @@ def get_train_op():
 
     lhs, lhs_label, rhs, rhs_label = dataset.make_one_shot_iterator().get_next()
     ops = model_train(lhs, lhs_label, rhs, rhs_label, params={'n_candidates': tf.constant(config.n_candidates)})
+    return ops
+
+def get_train_op():
+    dataset = DataGenerator(
+            sample_range=config.train_samples,
+            shuffle_samples=True,
+            max_patches_per_sample=config.max_patches_per_sample
+        ).make_dataset(
+            split_lhs_rhs=False
+        )
+
+    X, Y = dataset.make_one_shot_iterator().get_next()
+    ops = model_train(X, Y, params={'n_candidates': tf.constant(config.n_candidates)})
     return ops
 
 def get_eval_op():
@@ -59,7 +72,7 @@ train_timer = Timer()
 eval_timer = Timer()
 
 # hooks
-def post_train(result, epoch, step):
+def post_train_old(result, epoch, step):
     train_loss.update(result['loss'])
     train_acc.update((result['lhs_pred'] == result['lhs_label']).astype(np.float))
     train_acc.update((result['rhs_pred'] == result['rhs_label']).astype(np.float))
@@ -69,6 +82,18 @@ def post_train(result, epoch, step):
         'loss': f"{result['loss']:.4f}",
         'lhs_prob': float_list_to_str(result['lhs_prob']),
         'rhs_prob': float_list_to_str(result['rhs_prob'])
+    }.items():
+        log_str += f" {k}={v}"
+    print(log_str)
+
+def post_train(result, epoch, step):
+    train_loss.update(result['loss'])
+    train_acc.update((result['pred'] == result['label']).astype(np.float))
+
+    log_str = f"* epoch {epoch+1}/{n_epoches} step {step+1}/{n_train_steps}:"
+    for k,v in {
+        'loss': f"{result['loss']:.4f}",
+        'prob': float_list_to_str(result['prob']),
     }.items():
         log_str += f" {k}={v}"
     print(log_str)
