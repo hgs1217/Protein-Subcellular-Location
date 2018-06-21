@@ -122,8 +122,9 @@ class ImagePreprocessor(object):
         :param set_id: folder name of an data instance, like 'liver_ENSG00000004975_22914'
         :return: a list of cv_data
         """
+        import re
         image_dir = os.path.join(self.__data_dir, set_id, 'normal')
-        texts = os.listdir(image_dir)
+        texts = [t for t in os.listdir(image_dir) if re.match(r'[0-9a-zA-Z_]+\.(jpg|txt)', t)]
         os.chdir(image_dir)
         full_set = []
         for text in texts:
