@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:52:18
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 14:39:56
+# @Last Modified time: 2018-06-21 15:18:13
 # 
 # Raw Dataset: 3 3000x3000 images -> 6 labels
 # My Dataset: 236 samples, each contains 10000 32x32 patches -> 6 labels
@@ -16,7 +16,7 @@ import time
 import tensorflow as tf
 import numpy as np
 
-from config import config
+import config
 from util import Stat, float_list_to_str, Timer
 from dataset import DataGenerator
 from model import model_train, model_eval

@@ -2,14 +2,14 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:34
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 14:19:46
+# @Last Modified time: 2018-06-21 15:18:48
 
 import os, re, pickle, time, itertools, random
 import numpy as np
 
 import _import_helper
 from data_process.image_preprocessor import ImagePreprocessor
-from config import config
+import config
 from cut_img import cut_img
 
 def branch_tee(generator, condition_func):

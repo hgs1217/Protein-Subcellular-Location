@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-06-01 16:25:21
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 14:42:48
+# @Last Modified time: 2018-06-21 15:17:19
 
 import os
 from util import Path
@@ -31,3 +31,6 @@ class config:
     min_patches_per_sample = 1000
     max_patches_per_sample = 2048
     n_candidates = int(max_patches_per_sample * 0.8)
+
+import sys
+sys.modules['config'] = config

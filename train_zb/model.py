@@ -2,12 +2,13 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:30
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 14:42:29
+# @Last Modified time: 2018-06-21 15:18:40
 
 import tensorflow as tf
 import numpy as np
 from itertools import product
 
+import config
 
 def net(val, training=True):
     conv = tf.layers.conv2d
@@ -67,7 +68,7 @@ def model_train(lhs_features, lhs_label, rhs_features, rhs_label, params):
     loss *= loss_mask
     loss = tf.reduce_sum(loss) / tf.reduce_sum(loss_mask)
 
-    optimizer = tf.train.AdagradOptimizer(learning_rate=0.1)
+    optimizer = tf.train.AdagradOptimizer(learning_rate=config.learning_rate)
     opt_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
     ops = {
         'lhs_prob': lhs_prob,
