@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:30
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-20 23:10:44
+# @Last Modified time: 2018-06-21 13:37:03
 
 import tensorflow as tf
 import numpy as np
@@ -15,23 +15,24 @@ def net(val, training=True):
     dropout = tf.layers.dropout
     dense = tf.layers.dense
 
-    val =  tf.expand_dims(val, axis=-1)  # insert channel dim -> N  x 32 x 32 x 1
-    val = conv(val, filters=32, kernel_size=5, strides=1, padding='same')   # -> N x 32 x 32 x 32
-    val = pool(val, pool_size=2, strides=2)                                 # -> N x 16 x 16 x 32
-    val = conv(val, filters=64, kernel_size=5, strides=1, padding='same')   # -> N x 16 x 16 x 64
-    val = pool(val, pool_size=2, strides=2)                                 # -> N x 8 x 8 x 64
-    val = conv(val, filters=128, kernel_size=8, strides=1)                  # -> N x 1 x 1 x 128
-    val = tf.layers.flatten(val)                                           # -> N x 128
+    with tf.variable_scope('Net', reuse=tf.AUTO_REUSE):
+        val =  tf.expand_dims(val, axis=-1)  # insert channel dim -> N  x 32 x 32 x 1
+        val = conv(val, filters=32, kernel_size=5, strides=1, padding='same')   # -> N x 32 x 32 x 32
+        val = pool(val, pool_size=2, strides=2)                                 # -> N x 16 x 16 x 32
+        val = conv(val, filters=64, kernel_size=5, strides=1, padding='same')   # -> N x 16 x 16 x 64
+        val = pool(val, pool_size=2, strides=2)                                 # -> N x 8 x 8 x 64
+        val = conv(val, filters=128, kernel_size=8, strides=1)                  # -> N x 1 x 1 x 128
+        val = tf.layers.flatten(val)                                           # -> N x 128
 
-    def dnn(val):
-        val = dropout(val, rate=0.5, training=training)
-        val = dense(val, units=64, activation=tf.nn.relu)
-        val = dense(val, units=16, activation=tf.nn.relu)
-        val = dense(val, units=1,  activation=tf.nn.sigmoid)             # -> N x 1
-        val = tf.reshape(val, [-1])
-        return val
+        def dnn(val):
+            val = dropout(val, rate=0.5, training=training)
+            val = dense(val, units=64, activation=tf.nn.relu)
+            val = dense(val, units=16, activation=tf.nn.relu)
+            val = dense(val, units=1,  activation=tf.nn.sigmoid)             # -> N x 1
+            val = tf.reshape(val, [-1])
+            return val
 
-    heads = tf.stack([dnn(val) for _ in range(6)])    # -> 6 x N
+        heads = tf.stack([dnn(val) for _ in range(6)])    # -> 6 x N
     return heads
 
 def model_train(lhs_features, lhs_label, rhs_features, rhs_label, params):
@@ -56,16 +57,18 @@ def model_train(lhs_features, lhs_label, rhs_features, rhs_label, params):
     loss *= loss_mask
     loss = tf.reduce_sum(loss) / tf.reduce_sum(loss_mask)
 
-    metrics = {
-        'lhs_pred': lhs_pred,
-        'rhs_pred': rhs_pred,
-        'loss': loss,
-    }
-    metrics = {k: tf.identity(v, name=k) for k,v in metrics.items()}
-
     optimizer = tf.train.AdagradOptimizer(learning_rate=0.1)
-    train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
-    return train_op, metrics
+    opt_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
+    ops = {
+        'lhs_pred': lhs_pred,
+        'lhs_label': lhs_label,
+        'rhs_pred': rhs_pred,
+        'rhs_label': rhs_label,
+        'loss': loss,
+        'opt_op': opt_op
+    }
+
+    return ops
 
 def model_eval(features, labels, params):
     assert len(features.shape) == 3
@@ -88,13 +91,12 @@ def model_eval(features, labels, params):
     recall    = tf.where(TP + FN < 0.1, tf.constant(1.0), TP / (TP + FN)) + tf.constant(1e-5)
     f1score   = 2 / (1 / precision + 1 / recall)
 
-    metrics = {
-        'pred': net_out_top,
+    ops = {
+        'logits': net_out_top,
+        'pred': pred,
         'labels': labels,
         'precision': precision,
         'recall': recall,
         'f1score': f1score
     }
-    metrics = {k: tf.identity(v, name=k) for k,v in metrics.items()}
-
-    return metrics
+    return ops
