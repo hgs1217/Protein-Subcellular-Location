@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-06-21 13:40:51
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 14:37:20
+# @Last Modified time: 2018-06-22 09:35:24
 
 import os
 class Path(str):
@@ -23,6 +23,7 @@ def float_list_to_str(lst, format_str='{:.2f}'):
 import numpy as np
 class Stat:
     def __init__(self, update_type, init_val, **kwargs):
+        self.init_val = init_val
         self.val = init_val
         self.type = update_type
 
@@ -39,6 +40,11 @@ class Stat:
         elif self.type == 'avg':
             self.val -= (self.val - val) / (1 + self.count)
             self.count += 1
+
+    def reset(self):
+        self.val = self.init_val
+        if self.type == 'avg':
+            self.count = 0
 
     def __repr__(self):
         if isinstance(self.val, (list, tuple, np.ndarray)):

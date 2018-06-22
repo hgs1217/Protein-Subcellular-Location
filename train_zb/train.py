@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:52:18
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 23:30:06
+# @Last Modified time: 2018-06-22 09:25:50
 # 
 # Raw Dataset: 3 3000x3000 images -> 6 labels
 # My Dataset: 236 samples, each contains 10000 32x32 patches -> 6 labels
@@ -120,6 +120,9 @@ def post_eval(result, epoch, step):
     print(log_str)
 
 def post_epoch(epoch):
+    eval_acc.reset()
+    eval_f1.reset()
+
     epoch_log_str = f"** epoch {epoch+1}/{n_epoches}:"
     for k,v in {
         "train_loss": train_loss,
