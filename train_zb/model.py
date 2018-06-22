@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:30
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 16:58:03
+# @Last Modified time: 2018-06-21 23:23:21
 
 import tensorflow as tf
 import numpy as np
@@ -22,14 +22,14 @@ def net(val, training=True):
         val = pool(val, pool_size=2, strides=2)                                 # -> N x 16 x 16 x 32
         val = conv(val, filters=64, kernel_size=5, strides=1, padding='same')   # -> N x 16 x 16 x 64
         val = pool(val, pool_size=2, strides=2)                                 # -> N x 8 x 8 x 64
-        val = conv(val, filters=128, kernel_size=8, strides=1)                  # -> N x 1 x 1 x 128
-        val = tf.layers.flatten(val)                                           # -> N x 128
+        val = conv(val, filters=128, kernel_size=5, strides=1)                  # -> N x 4 x 4 x 128
+        val = tf.layers.flatten(val)                                            # -> N x (4 * 4 * 128)
 
         def dnn(val):
             val = dropout(val, rate=0.5, training=training)
-            val = dense(val, units=64, activation=tf.nn.relu)
-            val = dense(val, units=16, activation=tf.nn.relu)
-            val = dense(val, units=1,  activation=tf.nn.sigmoid)             # -> N x 1
+            val = dense(val, units=1024, activation=tf.nn.relu)
+            val = dense(val, units=256,  activation=tf.nn.sigmoid)             # -> N x 1
+            val = dense(val, units=1,   activation=tf.nn.sigmoid)             # -> N x 1
             val = tf.reshape(val, [-1])
             return val
 
@@ -91,16 +91,20 @@ def model_train(features, label, params):
     prob = tf.reduce_mean(top, axis=-1)
     pred = hard_threshold(prob)
 
-    prob_softmax = tf.stack([1-prob, prob], axis=-1)  # 6 x 2
-    loss = tf.losses.sparse_softmax_cross_entropy(label, prob_softmax)
+    prob_softmax = tf.stack([1-prob, prob], axis=-1)  # shape = 6 x 2
 
-    optimizer = tf.train.AdagradOptimizer(learning_rate=config.learning_rate)
-    opt_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
+    loss = tf.losses.sparse_softmax_cross_entropy(label, prob_softmax, reduction=tf.losses.Reduction.NONE)  # shape = 6
+    weights = tf.where(tf.equal(label, 0), params['label_weights'][0], params['label_weights'][1])
+    loss_weighted = tf.reduce_mean(loss * weights)
+
+    # optimizer = tf.train.AdagradOptimizer(learning_rate=config.learning_rate)
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=config.learning_rate)
+    opt_op = optimizer.minimize(loss_weighted, global_step=tf.train.get_global_step())
     ops = {
         'prob': prob,
         'pred': pred,
         'label': label,
-        'loss': loss,
+        'loss': loss_weighted,
         'opt_op': opt_op
     }
 
@@ -121,7 +125,7 @@ def model_eval(features, labels, params):
 
     TP, TN, FP, FN = (tf.reduce_sum(tf.cast(x, tf.float32)) for x in [TP, TN, FP, FN])
 
-    precision = tf.where(TP + FP < 0.1, tf.constant(1.0), TP / (TP + FP)) + tf.constant(1e-5)
+    precision = tf.where(TP + FP < 0.1, tf.constant(0.0), TP / (TP + FP)) + tf.constant(1e-5)
     recall    = tf.where(TP + FN < 0.1, tf.constant(1.0), TP / (TP + FN)) + tf.constant(1e-5)
     f1score   = 2 / (1 / precision + 1 / recall)
 

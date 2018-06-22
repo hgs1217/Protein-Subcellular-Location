@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:52:18
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 16:52:39
+# @Last Modified time: 2018-06-21 23:30:06
 # 
 # Raw Dataset: 3 3000x3000 images -> 6 labels
 # My Dataset: 236 samples, each contains 10000 32x32 patches -> 6 labels
@@ -24,7 +24,7 @@ from model import model_train, model_eval
 def get_train_op_old():
     dataset = DataGenerator(
             sample_range=config.train_samples,      # we have 236 samples
-            shuffle_samples=False,
+            shuffle_samples=True,
             max_patches_per_sample=config.max_patches_per_sample
         ).make_dataset(
             split_lhs_rhs=True
@@ -35,22 +35,27 @@ def get_train_op_old():
     return ops
 
 def get_train_op():
-    dataset = DataGenerator(
+    dg = DataGenerator(
             sample_range=config.train_samples,
             shuffle_samples=True,
             max_patches_per_sample=config.max_patches_per_sample
-        ).make_dataset(
-            split_lhs_rhs=False
         )
+    ds = dg.make_dataset(split_lhs_rhs=False)
+    label_weights = dg.get_label_weights_from_dumped()
+    print("Label weights used: ", label_weights)
+    label_weights = tf.constant(label_weights, dtype=tf.float32)
 
-    X, Y = dataset.make_one_shot_iterator().get_next()
-    ops = model_train(X, Y, params={'n_candidates': tf.constant(config.n_candidates)})
+    X, Y = ds.make_one_shot_iterator().get_next()
+    ops = model_train(X, Y, params={
+        'n_candidates': tf.constant(config.n_candidates),
+        'label_weights': label_weights
+    })
     return ops
 
 def get_eval_op():
     dataset = DataGenerator(
             sample_range=config.eval_samples,
-            shuffle_samples=False,
+            shuffle_samples=True,
             max_patches_per_sample=config.max_patches_per_sample
         ).make_dataset(
             split_lhs_rhs=False
@@ -60,9 +65,9 @@ def get_eval_op():
     ops = model_eval(X, Y, params={'n_candidates': tf.constant(config.n_candidates)})
     return ops
 
-n_epoches = 100
-n_train_steps = 10
-n_eval_steps = 30
+n_epoches = 200
+n_train_steps = 100
+n_eval_steps = 25
 
 train_loss = Stat('exp', 0, decay=0.9, format='{:.4f}')
 train_acc  = Stat('exp', np.zeros(config.n_labels), decay=0.9, format='{:.3f}')

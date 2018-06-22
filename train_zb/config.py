@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-06-01 16:25:21
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 15:17:19
+# @Last Modified time: 2018-06-21 23:29:24
 
 import os
 from util import Path
@@ -30,7 +30,7 @@ class config:
     learning_rate = 0.1
     min_patches_per_sample = 1000
     max_patches_per_sample = 2048
-    n_candidates = int(max_patches_per_sample * 0.8)
+    n_candidates = int(max_patches_per_sample * 0.4)
 
 import sys
 sys.modules['config'] = config

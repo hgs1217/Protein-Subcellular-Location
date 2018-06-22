@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:34
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 15:18:48
+# @Last Modified time: 2018-06-21 20:35:40
 
 import os, re, pickle, time, itertools, random
 import numpy as np
@@ -76,6 +76,22 @@ class DataGenerator:
         self._lhs_gen = _generate_raw_data()
         self._rhs_gen = _generate_raw_data()
         self._gen = _generate_raw_data()
+
+
+    def get_label_weights_from_dumped(self):
+        sample_files = sorted(f for f in os.listdir(config.dataset_dir) if re.match(r'sample(\d+)_([01]+)', f))
+        sample_files = sample_files[self._sample_slice]
+
+        if len(sample_files) == 0:
+            raise ValueError(f"sample index range {self._sample_slice} out of range")
+
+        labels = [[[1, 0] if l == '0' else [0, 1] for l in re.match(r'sample\d+_([01]+)', f)[1]] for f in sample_files]
+        # N x 6 x 2
+        labels = np.array(labels, dtype=np.float)
+        label_weight = np.sum(labels, axis=0)
+        label_weight = 0.5 * len(labels) / label_weight
+        label_weight = label_weight.T # 6 x 2 -> 2 x 6
+        return label_weight
 
     def lhs_data_gen(self):
         while True:
