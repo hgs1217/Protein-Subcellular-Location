@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-06-01 16:25:21
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 23:29:24
+# @Last Modified time: 2018-06-22 11:14:18
 
 import os
 from util import Path
@@ -23,13 +23,14 @@ class config:
     padding = 750
     train_samples = [30, 230]
     eval_samples = [0, 30]
-    # batch_size = 1024
+    batch_size = 1024
+    shuffle_size = 2048 * 3
+    # shuffle_size = 1
 
     # training config
-    # shuffle_size = batch_size * 3
     learning_rate = 0.1
     min_patches_per_sample = 1000
-    max_patches_per_sample = 2048
+    max_patches_per_sample = 256
     n_candidates = int(max_patches_per_sample * 0.4)
 
 import sys

@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:52:18
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-22 09:25:50
+# @Last Modified time: 2018-06-22 11:16:19
 # 
 # Raw Dataset: 3 3000x3000 images -> 6 labels
 # My Dataset: 236 samples, each contains 10000 32x32 patches -> 6 labels
@@ -40,7 +40,7 @@ def get_train_op():
             shuffle_samples=True,
             max_patches_per_sample=config.max_patches_per_sample
         )
-    ds = dg.make_dataset(split_lhs_rhs=False)
+    ds = dg.make_dataset(split_lhs_rhs=False, batch_size=config.batch_size, shuffle_size=config.shuffle_size)
     label_weights = dg.get_label_weights_from_dumped()
     print("Label weights used: ", label_weights)
     label_weights = tf.constant(label_weights, dtype=tf.float32)
@@ -58,7 +58,9 @@ def get_eval_op():
             shuffle_samples=True,
             max_patches_per_sample=config.max_patches_per_sample
         ).make_dataset(
-            split_lhs_rhs=False
+            split_lhs_rhs=False,
+            batch_size=config.batch_size,
+            shuffle_size=config.shuffle_size
         )
 
     X, Y = dataset.make_one_shot_iterator().get_next()
@@ -93,25 +95,26 @@ def post_train_old(result, epoch, step):
 
 def post_train(result, epoch, step):
     train_loss.update(result['loss'])
-    train_acc.update((result['pred'] == result['label']).astype(np.float))
+    train_acc.update(np.mean((result['pred'] == result['labels']).astype(np.float), axis=0))
 
     log_str = f"* epoch {epoch+1}/{n_epoches} step {step+1}/{n_train_steps}:"
     for k,v in {
         'loss': f"{result['loss']:.4f}",
-        'prob': float_list_to_str(result['prob']),
+        'prob[0]': float_list_to_str(result['prob'][0]),
+        'label[0]': result['labels'][0],
     }.items():
         log_str += f" {k}={v}"
     print(log_str)
 
 def post_eval(result, epoch, step):
     eval_f1.update(result['f1score'])
-    eval_acc.update((result['pred'] == result['labels']).astype(np.float))
+    eval_acc.update(np.mean((result['pred'] == result['labels']).astype(np.float), axis=0))
 
     log_str = f"* epoch {epoch+1}/{n_epoches} sample {i}:"
     for k,v in {
-        'prob': float_list_to_str(result['prob']),
-        'pred': result['pred'],
-        'labels': result['labels'],
+        'prob[0]': float_list_to_str(result['prob'][0]),
+        'pred[0]': result['pred'][0],
+        'labels[0]': result['labels'][0],
         'prec': f"{result['precision']:.4f}",
         'reca': f"{result['recall']:.4f}",
         'f1': f"{result['f1score']:.4f}"
@@ -120,9 +123,6 @@ def post_eval(result, epoch, step):
     print(log_str)
 
 def post_epoch(epoch):
-    eval_acc.reset()
-    eval_f1.reset()
-
     epoch_log_str = f"** epoch {epoch+1}/{n_epoches}:"
     for k,v in {
         "train_loss": train_loss,
@@ -133,6 +133,8 @@ def post_epoch(epoch):
     }.items():
         epoch_log_str += f" {k}={v}"
     print("\n" + epoch_log_str + "\n")
+    eval_acc.reset()
+    eval_f1.reset()
 
 # Mainloop
 with tf.Session() as sess:

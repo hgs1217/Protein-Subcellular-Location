@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:30
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 23:23:21
+# @Last Modified time: 2018-06-22 10:47:22
 
 import tensorflow as tf
 import numpy as np
@@ -33,7 +33,7 @@ def net(val, training=True):
             val = tf.reshape(val, [-1])
             return val
 
-        heads = tf.stack([dnn(val) for _ in range(6)])    # -> 6 x N
+        heads = tf.transpose(tf.stack([dnn(val) for _ in range(6)]))    # -> N x 6
     return heads
 
 def try_most_top_k(x, k):
@@ -83,27 +83,28 @@ def model_train_old(lhs_features, lhs_label, rhs_features, rhs_label, params):
 
     return ops
 
-def model_train(features, label, params):
+def model_train(features, labels, params):
     assert len(features.shape) == 3
 
-    out = net(features)
-    top = try_most_top_k(out, k=params['n_candidates']).values
-    prob = tf.reduce_mean(top, axis=-1)
-    pred = hard_threshold(prob)
+    out = net(features) # N x 6
+    pred = hard_threshold(out)
 
-    prob_softmax = tf.stack([1-prob, prob], axis=-1)  # shape = 6 x 2
+    prob_softmax = tf.stack([1-out, out], axis=-1)  # shape = N x 6 x 2
 
-    loss = tf.losses.sparse_softmax_cross_entropy(label, prob_softmax, reduction=tf.losses.Reduction.NONE)  # shape = 6
-    weights = tf.where(tf.equal(label, 0), params['label_weights'][0], params['label_weights'][1])
+    loss = tf.losses.sparse_softmax_cross_entropy(labels, prob_softmax, reduction=tf.losses.Reduction.NONE)  # shape = N x 6
+    pos_weights = params['label_weights'][1]    # shape = 6
+    neg_weights = params['label_weights'][0]    # shape = 6
+    labels = tf.cast(labels, tf.float32)
+    weights = labels * pos_weights + (1 - labels) * neg_weights
     loss_weighted = tf.reduce_mean(loss * weights)
 
-    # optimizer = tf.train.AdagradOptimizer(learning_rate=config.learning_rate)
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate=config.learning_rate)
+    optimizer = tf.train.AdagradOptimizer(learning_rate=config.learning_rate)
+    # optimizer = tf.train.GradientDescentOptimizer(learning_rate=config.learning_rate)
     opt_op = optimizer.minimize(loss_weighted, global_step=tf.train.get_global_step())
     ops = {
-        'prob': prob,
+        'prob': out,
         'pred': pred,
-        'label': label,
+        'labels': labels,
         'loss': loss_weighted,
         'opt_op': opt_op
     }
@@ -113,28 +114,28 @@ def model_train(features, label, params):
 def model_eval(features, labels, params):
     assert len(features.shape) == 3
 
-    net_out = net(features, training=False)
-    net_out_top = try_most_top_k(net_out, k=params['n_candidates']).values
-    net_out_top = tf.reduce_mean(net_out_top, axis=-1)
-    pred = hard_threshold(net_out_top)
+    net_out = net(features, training=False) # N x 6
+    pred = hard_threshold(net_out)
 
     TP = tf.equal(pred, 1) & tf.equal(labels, 1)
     TN = tf.equal(pred, 0) & tf.equal(labels, 0)
     FP = tf.equal(pred, 1) & tf.equal(labels, 0)
     FN = tf.equal(pred, 0) & tf.equal(labels, 1)
 
-    TP, TN, FP, FN = (tf.reduce_sum(tf.cast(x, tf.float32)) for x in [TP, TN, FP, FN])
+    TP, TN, FP, FN = (tf.reduce_sum(tf.cast(x, tf.float32), axis=-1) for x in [TP, TN, FP, FN])
 
-    precision = tf.where(TP + FP < 0.1, tf.constant(0.0), TP / (TP + FP)) + tf.constant(1e-5)
-    recall    = tf.where(TP + FN < 0.1, tf.constant(1.0), TP / (TP + FN)) + tf.constant(1e-5)
+    zeros = tf.zeros(tf.shape(TP), dtype=tf.float32)
+    ones  = tf.ones (tf.shape(TP), dtype=tf.float32)
+    precision = tf.where(TP + FP < 0.1, zeros, TP / (TP + FP)) + tf.constant(1e-5)
+    recall    = tf.where(TP + FN < 0.1, ones, TP / (TP + FN)) + tf.constant(1e-5)
     f1score   = 2 / (1 / precision + 1 / recall)
 
     ops = {
-        'prob': net_out_top,
+        'prob': net_out,
         'pred': pred,
         'labels': labels,
-        'precision': precision,
-        'recall': recall,
-        'f1score': f1score
+        'precision': tf.reduce_mean(precision),
+        'recall': tf.reduce_mean(recall),
+        'f1score': tf.reduce_mean(f1score)
     }
     return ops

@@ -2,7 +2,7 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:34
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-21 20:35:40
+# @Last Modified time: 2018-06-22 11:14:27
 
 import os, re, pickle, time, itertools, random
 import numpy as np
@@ -68,10 +68,11 @@ class DataGenerator:
                 patches /= 255.0
 
                 # label_index = random.randint(0, config.n_labels-1)
-                print(f"{name}:{filename} {len(data['patches'])} -> {len(patches)} patches loaded")
+                # print(f"{name}:{filename} {len(data['patches'])} -> {len(patches)} patches loaded")
 
                 labels = [int(l) for l in labels]
-                yield patches, labels
+                for patch in patches:
+                    yield patch, labels
 
         self._lhs_gen = _generate_raw_data()
         self._rhs_gen = _generate_raw_data()
@@ -225,7 +226,7 @@ class DataGenerator:
 
     #     return make_patches(img)
 
-    def make_dataset(self, split_lhs_rhs):
+    def make_dataset(self, split_lhs_rhs, batch_size, shuffle_size):
         import tensorflow as tf
 
         if split_lhs_rhs:
@@ -243,9 +244,9 @@ class DataGenerator:
         else:
             ds_type_arg = (
                     (tf.float32, tf.int64),
-                    (tf.TensorShape([None, config.patch_size, config.patch_size]), tf.TensorShape([6, ]))
+                    (tf.TensorShape([config.patch_size, config.patch_size]), tf.TensorShape([6, ]))
                 )
-            ds = tf.data.Dataset.from_generator(self.data_gen, *ds_type_arg)
+            ds = tf.data.Dataset.from_generator(self.data_gen, *ds_type_arg).shuffle(shuffle_size).batch(batch_size)
         return ds
 
 if __name__ == '__main__':
