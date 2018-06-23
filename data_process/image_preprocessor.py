@@ -27,9 +27,9 @@ class ImagePreprocessor(object):
 
     """
 
-    def __init__(self, width=20, new_dir_name='new', base_dir=os.getcwd()):
+    def __init__(self, width=20, new_dir_name='new', base_dir=os.getcwd(), data_dir=os.path.join(os.getcwd(), 'data')):
         self.__base_dir = base_dir
-        self.__data_dir = os.path.join(base_dir, 'data')
+        self.__data_dir = os.path.join(base_dir, 'data') if data_dir is None else data_dir
         self.__width = int(int(width) / 2)
         self.__new_dir_name = new_dir_name
         self.__labels = {
@@ -359,6 +359,28 @@ class ImagePreprocessor(object):
 
         return label1s, label2s, cv_data
 
+    def get_valset_patched(self, size=20, exist=None):
+        """
+        :param size:
+        :param exist:
+        :return: val_name: folder name like "liver_ENSG00000004975_22914" for each 20*20 patch
+                            shape (None, 270)
+                cv_data: cv data of shape (None, 270, 20, 20, 3)
+        """
+        val_name, cv_data = [], []
+        if size is not None:
+            self.__set_width(int(int(size) / 2))
+        dir_sets = os.listdir(self.__data_dir)
+        dir_sets = [a_set for a_set in dir_sets if a_set.startswith('liver_ENSG')]
+        for a_set in dir_sets:
+            if exist is None:
+                a_full_set = self.__get_patch_a_set(a_set)
+            else:
+                a_full_set = self.__get_generated_patch_a_set(a_set, exist)
+            val_name.append([a_set] * len(a_full_set))
+            cv_data.append(a_full_set)
+        return val_name, cv_data
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Image parser')
@@ -375,11 +397,10 @@ if __name__ == '__main__':
 
     # sample usage
     # image_pre = ImagePreprocessor(base_dir=args.base_dir)
-    image_pre = ImagePreprocessor(base_dir='D:\\All_Projects\\ML_project\\HPA_ieee')
-    # image_pre.generate_patches()
+    image_pre = ImagePreprocessor(data_dir='D:\\All_Projects\\ML_project\\HPA_ieee', new_dir_name='val_new')
+    image_pre.generate_patches()
     # for l1, l2, d in image_pre.get_dataset_patched(size=20, data_selection='all', label_type='int', exist='new'):
     #     print(l1, l2, len(d), numpy.array(d).shape)
-    count = 0
-    for l1, l2, d in image_pre.get_dataset_full(data_selection='all', label_type='int'):
-        print(len(l1), len(l2), numpy.array(d).shape, count)
-        count += 1
+    a_name, d = image_pre.get_valset_patched(exist='val_new')
+    for i in range(len(a_name)):
+        print(a_name[i][0], numpy.array(d[i]).shape)

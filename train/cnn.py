@@ -195,24 +195,24 @@ class CNN:
         outfc = []
         for i in range(self._label_nums):  # We train the six labels at the same time
             label_name = "label%d_" % i
-            conv1 = conv_layer(x_resh, 11, 1, 64, is_training, name=label_name + "conv1")
+            conv1 = conv_layer(x_resh, 11, 1, 32, is_training, name=label_name + "conv1")
             pool1 = avg_pool_layer(conv1, 2, 2, name=label_name + "pool1")
             norm1 = norm_layer(pool1, 4)
 
-            conv2 = conv_layer(norm1, 5, 1, 192, is_training, name=label_name + "conv2", groups=2)
+            conv2 = conv_layer(norm1, 5, 1, 96, is_training, name=label_name + "conv2", groups=2)
             pool2 = avg_pool_layer(conv2, 2, 2, name=label_name + "pool2")
             norm2 = norm_layer(pool2, 4)
 
-            conv3 = conv_layer(norm2, 3, 1, 384, is_training, name=label_name + "conv3")
-            conv4 = conv_layer(conv3, 3, 1, 384, is_training, name=label_name + "conv4")
-            conv5 = conv_layer(conv4, 3, 1, 256, is_training, name=label_name + "conv5")
+            # conv3 = conv_layer(norm2, 3, 1, 384, is_training, name=label_name + "conv3")
+            # conv4 = conv_layer(conv3, 3, 1, 384, is_training, name=label_name + "conv4")
+            conv5 = conv_layer(norm2, 3, 1, 64, is_training, name=label_name + "conv5")
             pool5 = avg_pool_layer(conv5, 2, 2, name=label_name + "pool5")
 
-            fc_in = tf.reshape(pool5, [-1, 3 * 3 * 256])
-            fc6 = fc_layer(fc_in, 4096, is_training, name=label_name + "fc6", relu_flag=True)
+            fc_in = tf.reshape(pool5, [-1, 3 * 3 * 64])
+            fc6 = fc_layer(fc_in, 1024, is_training, name=label_name + "fc6", relu_flag=True)
             dropout6 = tf.nn.dropout(fc6, self._keep_prob)
 
-            fc7 = fc_layer(dropout6, 4096, is_training, name=label_name + "fc7", relu_flag=True)
+            fc7 = fc_layer(dropout6, 1024, is_training, name=label_name + "fc7", relu_flag=True)
             dropout7 = tf.nn.dropout(fc7, self._keep_prob)
 
             fc8 = fc_layer(dropout7, self._classes, is_training, name=label_name + "fc8", relu_flag=True)
