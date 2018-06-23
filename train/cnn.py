@@ -136,7 +136,8 @@ class CNN:
             dropout3 = tf.nn.dropout(fc3, self._keep_prob)
 
             fc4 = fc_layer(dropout3, self._classes, is_training, name=label_name+"fc4", relu_flag=True)
-            outfc.append(fc4)
+            norm4 = tf.nn.sigmoid(fc4)
+            outfc.append(norm4)
 
         out = tf.reshape(tf.concat(outfc, axis=1), [-1, self._label_nums, self._classes])
         loss = weighted_loss(out, y, self._classes, self._loss_array)

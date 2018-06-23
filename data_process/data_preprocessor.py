@@ -1,6 +1,7 @@
 # @Author:      HgS_1217_
 # @Create Date: 2018/6/1
 
+import os
 import numpy as np
 
 from config import DATASET_PATH
@@ -12,7 +13,7 @@ def generate_patch(dataset_path=DATASET_PATH):
         Generate patches in the dataset.
         :return:
     """
-    image_pre = ImagePreprocessor(base_dir=dataset_path)
+    image_pre = ImagePreprocessor(base_dir=dataset_path, data_dir=os.path.join(dataset_path, 'data'))
     image_pre.generate_patches()
 
 
@@ -45,7 +46,7 @@ def data_construction(target_labels, ratio=8 / 9):
                         [0.5 / (label counter / label size), 0.5 / (1 - label counter / label size)]
                     Loss array provide a balance in training for data under non-uniform distribution.
     """
-    image_pre = ImagePreprocessor(base_dir=DATASET_PATH)
+    image_pre = ImagePreprocessor(base_dir=DATASET_PATH, data_dir=os.path.join(DATASET_PATH, 'data'))
     l1, l2, d = image_pre.get_dataset_patched(size=20, data_selection='all', label_type='int', exist='new')
 
     r, l = [[] for _ in range(480)], [[] for _ in range(480)]
