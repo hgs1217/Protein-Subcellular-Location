@@ -135,8 +135,8 @@ class CNN:
             fc3 = fc_layer(fc_in, 1024, is_training, name=label_name+"fc3", relu_flag=True)
             dropout3 = tf.nn.dropout(fc3, self._keep_prob)
 
-            fc4 = fc_layer(dropout3, self._classes, is_training, name=label_name+"fc4", relu_flag=True)
-            norm4 = tf.nn.sigmoid(fc4)
+            fc4 = fc_layer(dropout3, self._classes, is_training, name=label_name+"fc4", relu_flag=False)
+            norm4 = tf.nn.softmax(tf.nn.sigmoid(fc4))
             outfc.append(norm4)
 
         out = tf.reshape(tf.concat(outfc, axis=1), [-1, self._label_nums, self._classes])
