@@ -2,14 +2,14 @@
 # @Author: gigaflw
 # @Date:   2018-05-29 09:56:34
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-20 21:24:33
+# @Last Modified time: 2018-06-21 20:35:40
 
 import os, re, pickle, time, itertools, random
 import numpy as np
 
 import _import_helper
 from data_process.image_preprocessor import ImagePreprocessor
-from config import config
+import config
 from cut_img import cut_img
 
 def branch_tee(generator, condition_func):
@@ -27,7 +27,8 @@ class DataGenerator:
         self._max_patches = max_patches_per_sample
         self._shuffle_samples = shuffle_samples
 
-        self._current_label_index = 0   # 0 ~ 5
+        self._must_differ_label_index = 0   # 0 ~ 5
+        self._lhs_label = self._rhs_label = [0] * config.n_labels
 
     def _reload(self, name=''):
         if self._dataset == 'dumped':
@@ -46,15 +47,17 @@ class DataGenerator:
             random.shuffle(sample_files)
 
         sample_files = [ (f, [x == '1' for x in re.match(r'sample\d+_([01]+)', f)[1]]) for f in sample_files]
-        def _generate_raw_data(filter_label=None):
+        def _generate_raw_data():
             for filename, labels in sample_files:
                 # labels is an onehot like [False, True, False, False, ...]
-                if filter_label and not filter_label(labels):
+
+                if not self._check_must_differ_label_index(labels, name):
                     continue
 
                 data = pickle.load(open(config.dataset_dir/filename, 'br'))
                 patches = data['patches']
-                if len(patches) < 1500:
+
+                if len(patches) < config.min_patches_per_sample:
                     continue
 
                 if self._max_patches > 0:
@@ -74,6 +77,22 @@ class DataGenerator:
         self._rhs_gen = _generate_raw_data()
         self._gen = _generate_raw_data()
 
+
+    def get_label_weights_from_dumped(self):
+        sample_files = sorted(f for f in os.listdir(config.dataset_dir) if re.match(r'sample(\d+)_([01]+)', f))
+        sample_files = sample_files[self._sample_slice]
+
+        if len(sample_files) == 0:
+            raise ValueError(f"sample index range {self._sample_slice} out of range")
+
+        labels = [[[1, 0] if l == '0' else [0, 1] for l in re.match(r'sample\d+_([01]+)', f)[1]] for f in sample_files]
+        # N x 6 x 2
+        labels = np.array(labels, dtype=np.float)
+        label_weight = np.sum(labels, axis=0)
+        label_weight = 0.5 * len(labels) / label_weight
+        label_weight = label_weight.T # 6 x 2 -> 2 x 6
+        return label_weight
+
     def lhs_data_gen(self):
         while True:
             self._reload(name='lhs')
@@ -91,21 +110,24 @@ class DataGenerator:
         lhs, rhs = next(lhs_gen), next(rhs_gen)
 
         while True:
-            if lhs[1] == rhs[1]:    # compare betweeen python lists
-                if random.random() > 0.5:
-                    lhs = next(lhs_gen)
-                else:
-                    rhs = next(rhs_gen)
-            else:
-                yield lhs[0], lhs[1], rhs[0], rhs[1]
-                lhs = next(lhs_gen)
-                rhs = next(rhs_gen)
+            yield lhs[0], lhs[1], rhs[0], rhs[1]
 
-        # for (pos_patches, pos_labels), (neg_patches, neg_labels) in zip(self.lhs_data_gen(), self.rhs_data_gen()):
-        #     yield pos_patches, neg_patches, self._current_label_index
+            self._must_differ_label_index = random.randint(0, config.n_labels - 1)
+            print(f"must-differ-label-index changed to {self._must_differ_label_index}")
 
-            # self._current_label_index = random.randint(0, 5)
-            # print(f"label index changed to {self._current_label_index}")
+            lhs = next(lhs_gen)
+            rhs = next(rhs_gen)
+
+
+    def _check_must_differ_label_index(self, label, name):
+        if name == 'lhs':
+            self._lhs_label = label
+            return self._lhs_label[self._must_differ_label_index] != self._rhs_label[self._must_differ_label_index]
+        elif name == 'rhs':
+            self._rhs_label = label
+            return self._lhs_label[self._must_differ_label_index] != self._rhs_label[self._must_differ_label_index]
+
+        return True
 
     def data_gen(self):
         while True:

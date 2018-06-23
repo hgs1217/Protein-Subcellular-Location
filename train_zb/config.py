@@ -2,19 +2,10 @@
 # @Author: gigaflw
 # @Date:   2018-06-01 16:25:21
 # @Last Modified by:   gigaflw
-# @Last Modified time: 2018-06-20 20:27:14
+# @Last Modified time: 2018-06-21 23:29:24
 
 import os
-
-class Path(str):
-    def __init__(self, path):
-        self.path = path
-
-    def __truediv__(self, path):
-        return Path(os.path.join(self.path, str(path)))
-
-    def __rtruediv__(self, path):
-        return Path(os.path.join(str(path), self.path))
+from util import Path
 
 class config:
     model_dir = None
@@ -37,5 +28,9 @@ class config:
     # training config
     # shuffle_size = batch_size * 3
     learning_rate = 0.1
+    min_patches_per_sample = 1000
     max_patches_per_sample = 2048
-    n_candidates = int(max_patches_per_sample * 0.8)
+    n_candidates = int(max_patches_per_sample * 0.4)
+
+import sys
+sys.modules['config'] = config
