@@ -82,13 +82,15 @@ def main(dataset_path):
         sess.run(tf.global_variables_initializer())
         saver.restore(sess, ckpt.model_checkpoint_path)
 
-        results = []
+        results = {}
 
         for i in range(len(xs)):
             pred = sess.run(y, feed_dict={x: xs[i], keep_prob: 1.0, is_training: True})
-            results.append(pred)
+            results[vals[i][0]] = pred.tolist()
 
     print(results)
+    with open("D:/Computer Science/Github/Protein-Subcellular-Location/model/result.txt", "w") as f:
+        f.write(str(results))
 
 
 if __name__ == '__main__':
