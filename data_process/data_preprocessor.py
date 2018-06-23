@@ -7,12 +7,12 @@ from config import DATASET_PATH
 from data_process.image_preprocessor import ImagePreprocessor
 
 
-def generate_patch():
+def generate_patch(dataset_path=DATASET_PATH):
     """
         Generate patches in the dataset.
         :return:
     """
-    image_pre = ImagePreprocessor(base_dir=DATASET_PATH)
+    image_pre = ImagePreprocessor(base_dir=dataset_path)
     image_pre.generate_patches()
 
 
