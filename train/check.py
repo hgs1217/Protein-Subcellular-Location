@@ -21,6 +21,7 @@ def get_data_trainset(dataset_path):
 def get_data(dataset_path):
     image_pre = ImagePreprocessor(base_dir=dataset_path, data_dir=os.path.join(dataset_path, 'data'))
     vals, data = image_pre.get_valset_patched(exist='new')
+    data = [piece[-30:] for piece in data]
     return vals, data
 
 
@@ -53,13 +54,13 @@ def main_trainset(dataset_path):
                 label_array.append([1, 0] if target in lbs else [0, 1])
             labels = np.array([label_array for _ in range(len(xs[i]))])
 
-            pred = sess.run(y, feed_dict={x: xs[i], keep_prob: 1.0, is_training: True})
+            pred = sess.run(y, feed_dict={x: xs[i], keep_prob: 1.0, is_training: False})
             results.append(pred)
 
             accu = np.mean(np.equal(np.argmax(pred, 2), np.argmax(labels, 2)), axis=0)
-            print(accu, np.prod(accu))
+            print(lbs, accu, np.prod(accu))
 
-        print(results)
+        # print(results)
 
 
 def main(dataset_path):
@@ -85,15 +86,19 @@ def main(dataset_path):
         results = {}
 
         for i in range(len(xs)):
-            pred = sess.run(y, feed_dict={x: xs[i], keep_prob: 1.0, is_training: True})
-            results[vals[i][0]] = pred.tolist()
+            pred = sess.run(y, feed_dict={x: xs[i], keep_prob: 1.0, is_training: False})
+            results[vals[i][0]] = pred
 
     print(results)
-    with open("D:/Computer Science/Github/Protein-Subcellular-Location/model/result.txt", "w") as f:
-        f.write(str(results))
+    with open("D:/Computer Science/Github/Protein-Subcellular-Location/model/result.csv", "w") as f:
+        for val in results.keys():
+            probs = ",".join([str(x[0]) for x in np.mean(results[val], axis=0).tolist()])
+            res = "{0},{1}\n".format(val, probs)
+            f.write(res)
 
 
 if __name__ == '__main__':
-    # generate_patch()
-    # main_trainset("D:/Computer Science/dataset/HPA_ieee_test")
-    main("D:/Computer Science/dataset/HPA_ieee_test")
+    dataset_path = "D:/Computer Science/dataset/HPA_ieee_test"
+    # generate_patch(dataset_path)
+    # main_trainset(dataset_path)
+    main(dataset_path)
