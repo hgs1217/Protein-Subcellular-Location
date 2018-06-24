@@ -98,7 +98,8 @@ class ImagePreprocessor(object):
         :return:
         """
         sets = os.listdir(self.__data_dir)
-        sets = [a_set for a_set in sets if a_set.startswith('liver_ENSG')]
+        import re
+        sets = [a_set for a_set in sets if re.match(r'[0-9a-zA-Z_]+', a_set)]
         total = len(sets)
         count = 1
         for a_set in sets:
@@ -372,7 +373,8 @@ class ImagePreprocessor(object):
         if size is not None:
             self.__set_width(int(int(size) / 2))
         dir_sets = os.listdir(self.__data_dir)
-        dir_sets = [a_set for a_set in dir_sets if a_set.startswith('liver_ENSG')]
+        import re
+        dir_sets = [a_set for a_set in dir_sets if re.match(r'[0-9a-zA-Z_]+', a_set)]
         for a_set in dir_sets:
             if exist is None:
                 a_full_set = self.__get_patch_a_set(a_set)
